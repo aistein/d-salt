@@ -1,0 +1,5 @@
+#!/bin/bash
+
+./fct-all-alpha.py tmp/W1/w1_a0p1.xml tmp/W1/w1_a1.xml tmp/W1/w1_a10.xml tmp/W1/w1_a100.xml tmp/W1/w1_nopbs.xml
+./fct-all-alpha.py tmp/W2/w2_a0p1.xml tmp/W2/w2_a1.xml tmp/W2/w2_a10.xml tmp/W2/w2_a100.xml tmp/W2/w2_nopbs.xml
+./fct-all-alpha.py tmp/W3/w3_a0p1.xml tmp/W3/w3_a1.xml tmp/W3/w3_a10.xml tmp/W3/w3_a100.xml tmp/W3/w3_nopbs.xml

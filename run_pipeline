@@ -1,0 +1,334 @@
+#!/bin/bash
+
+#---------- begin user configurations -------------------------
+# ns3 build area
+ns3='./ns3.29-workspace-dev'
+# number of flows to send
+flows=300000
+# queue buffer size
+buff=42400
+# DCTCP threshold
+thresh=10
+# PBS Alpha Values
+alphas=(1 10 1000)
+# Workload Profiles
+profiles=(1 2 3 4 5)
+# Desired Network Load
+load=0.9
+# Load Multipliers
+load_multipliers=(8 10 14 34 125) # 90% load multipliers
+# Tag Addon
+addon="_2:1-oversub" # leave empty-string if not running parallel instances of this script, else "-<run name>"
+
+# Plot Generation Switches
+run_simulations=true # if false, expects pre-populated tmp dir
+upload=true # if true, upload results to GCS
+clean=false # if true, remove all temporary files
+categorize_flows=false # generate flow category plots
+without_dctcp=false # add "without_dctcp" to sims
+scatterplots=false # graph slowdown & fct scatters
+#----------- end user configurations --------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# script start-time
+start=`date +%s`
+
+# function to wait for a bunch of jobs to finish
+synchronization_barrier () {
+	arr=("$@")
+	for pid in "${arr[@]}"; do
+		wait "$pid"
+	done
+}
+
+# date as UID for gcloud buckets
+date=`date +"%m_%d_%Y-%H-%M"`
+
+# make necessary directories
+if [ ! -d "results" ]; then
+	for i in "${profiles[@]}"; do
+		mkdir -p results/W$i/plots
+		mkdir -p results/W$i/data
+		mkdir -p $ns3/results/W$i
+		mkdir -p tmp/W$i
+		mkdir -p logs/W$i
+	done
+fi
+
+# clean out all old files from previous/local runs
+if [ "$clean" = true ]; then
+	for i in "${profiles[@]}"; do
+		sudo rm -f *timebounds.txt
+		sudo rm -f *mv_avg_bounds.txt
+		sudo rm -f *.png
+		sudo rm -f *.log
+        	sudo rm -f tmp/W$i/*
+		sudo rm -f logs/W$i/*
+        	sudo rm -f results/W$i/plots/*
+        	sudo rm -f results/W$i/data/*
+        	sudo rm -f $ns3/results/W$i/*
+	done
+fi
+
+# redirect stdout and stderr to logfile
+logfile="./run_pipeline-${date}.log"
+echo "-I- run_pipeline: running..."
+echo "-I- run_pipeline: to check status, run \"tail -f ${logfile}\""
+exec > "$logfile" 2>&1
+
+# print run configurations to config file for reference
+configfile="./run_pipeline-${date}.config"
+echo "flows:        	$flows"				>> "$configfile"
+echo "buff:         	$buff" 				>> "$configfile"
+echo "thresh:       	$thresh" 			>> "$configfile"
+echo "alphas:       	(${alphas[@]})" 		>> "$configfile"
+echo "profiles:     	(${profiles[@]})" 		>> "$configfile"
+echo "load:         	$load" 				>> "$configfile"
+echo "load_multipliers: (${load_multipliers[@]})" 	>> "$configfile"
+echo "addon:        	$addon" 			>> "$configfile"
+
+# initialize pids array for new jobs
+sim_pids=()
+load_pids=()
+plot_pids=()
+
+# if "run_simulations" is disabled, "tmp/..." directories are expected to be pre-populated
+if [ "$run_simulations" = true ]; then
+
+	# enter ns3 directory to run simulations
+	pushd $ns3
+	
+	# rebuild once before parallel deployments - avoids "compilation collision" between threads
+	sudo ./waf build
+	
+	# Simulations With PBS
+	for A in "${alphas[@]}";
+	do
+		for P in "${profiles[@]}";
+		do
+			# With DCTCP
+			args="scratch/homatopology"
+			args+=" --apps=$flows"
+			args+=" --buff=$buff"
+			args+=" --alpha=$A"
+			args+=" --thresh=$thresh"
+			args+=" --profile=$P"
+			args+=" --tag=a${A}${addon}"
+			args+=" --load=$load"
+			args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+			echo "Running Sim with args: $args"
+			sudo ./waf --run "$args" & sim_pids+=("$!")
+	
+			# Without DCTCP
+			if [ "$without_dctcp" = true ]; then
+				args="scratch/homatopology"
+				args+=" --apps=$flows"
+				args+=" --buff=$buff"
+				args+=" --alpha=$A"
+				args+=" --useDctcp=false"
+				args+=" --profile=$P"
+				args+=" --tag=a${A}_nodctcp$addon"
+				args+=" --load=$load"
+				args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+				echo "Running Sim with args: $args"
+				sudo ./waf --run "$args" & sim_pids+=("$!")
+			fi
+		done
+	done
+	
+	# Simulations Without PBS
+	thresh="$(($thresh*8))" # 8x DCTCP threshold for no-priority simulations
+	for P in "${profiles[@]}";
+	do
+		# With DCTCP
+		args="scratch/homatopology"
+		args+=" --apps=$flows"
+		args+=" --buff=$buff"
+		args+=" --usePbs=false"
+		args+=" --thresh=$thresh"
+		args+=" --profile=$P"
+		args+=" --tag=dctcp$addon"
+		args+=" --load=$load"
+		args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+		echo "Running Sim with args: $args"
+		sudo ./waf --run "$args" & sim_pids+=("$!")
+	
+		# Without DCTCP
+		if [ "$without_dctcp" = true ]; then
+			args="scratch/homatopology"
+			args+=" --apps=$flows"
+			args+=" --buff=$buff"
+			args+=" --usePbs=false"
+			args+=" --useDctcp=false"
+			args+=" --profile=$P"
+			args+=" --tag=nopbs_nodctcp$addon"
+			args+=" --load=$load"
+			args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+			echo "Running Sim with args: $args"
+			sudo ./waf --run "$args" & sim_pids+=("$!")
+		fi
+	done
+	
+	
+	# wait for simulations to complete
+	echo "-I- run_pipeline: simulations deployed..." > /dev/tty
+	echo "-I- run_pipeline: simulations deployed..."
+	synchronization_barrier "${sim_pids[@]}"
+	sim_finish=`date +%s`
+	sim_runtime=$((sim_finish-start))
+	echo "-I- run_pipeline: simulations completed in $sim_runtime (s)." > /dev/tty
+	echo "-I- run_pipeline: simulations completed in $sim_runtime (s)."
+	
+	# move back into original directory to run graph-gen scripts
+	popd
+	
+fi # if run_simulations
+
+if [ "$run_simulations" = true ]; then
+	# move ns3 simulation outputs into local tmp directory
+	for i in "${profiles[@]}"; do
+		if [ "$addon" != "" ];
+		then
+			sudo mv $ns3/results/W$i/*${addon}* tmp/W$i
+		else
+			sudo mv $ns3/results/W$i/* tmp/W$i
+		fi
+	done
+fi
+
+echo "-I- run_pipeline: generating plots..." > /dev/tty
+echo "-I- run_pipeline: generating plots..."
+
+# calculate network loads & timebounds files
+load_start=`date +%s`
+for i in "${profiles[@]}"; do
+	for filepath in tmp/W$i/*.load.tr; do
+		filename="$(basename -- $filepath)"
+		sudo ./scripts/calculate-network-load.py "$filepath" $load &> ./logs/W$i/${filename}.log & load_pids+=("$!")
+	done
+done
+
+# wait for load calculation to complete
+synchronization_barrier "${load_pids[@]}"
+load_finish=`date +%s`
+load_runtime=$((load_finish-load_start))
+echo "-I- run_pipeline: load plots finished in $load_runtime (s)." > /dev/tty
+echo "-I- run_pipeline: load plots finished in $load_runtime (s)."
+
+# calculate priority distirbution histograms
+for i in "${profiles[@]}"; do
+	for filepath in tmp/W$i/*.prio; do
+		filename="$(basename -- $filepath)"
+		sudo ./scripts/histogram.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+	done
+done
+
+# calculate slowdowns & completion times
+if [ "$scatterplots" = true ]; then
+	for i in "${profiles[@]}"; do
+		for filepath in tmp/W$i/*.xml; do
+			filename="$(basename -- $filepath)"
+			sudo ./scripts/slowdown-stats.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+			sudo ./scripts/raw-completion.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+		done
+	done
+fi
+
+# graph slowdown and completion 99th percentiles superimposed alphas
+for i in "${profiles[@]}"; do
+	prefix="tmp/W$i/w$i"
+	args=("${prefix}_dctcp.xml")
+	if [ "$without_dctcp" = true ]; then
+		args+=("${prefix}_nopbs_nodctcp.xml")
+	fi
+	for a in "${alphas[@]}"; do
+		args+=("${prefix}_a${a}.xml")
+		if [ "$without_dctcp" = true ]; then
+			args+=("${prefix}_a${a}_nodctcp.xml")
+		fi
+	done
+	sudo ./scripts/fct-all-alpha.py "${args[@]}" &> ./logs/W$i/w${i}_fct-all-alpha.log & plot_pids+=("$!")
+	sudo ./scripts/fct-cdf.py "${args[@]}" &> ./logs/W$i/w${i}_fct-cdf.log & plot_pids+=("$!")
+	#sudo ./scripts/slowdown-all-alpha.py "${args[@]}" &> ./logs/W$i/w${i}_slowdown-all-alpha.log & plot_pids+=("$!")
+done
+
+# graph flow/prio categorizations
+if [ "$categorize_flows" = true ]; then
+	for i in "${profiles[@]}"; do
+		for filepath in tmp/W$i/*.categories; do
+			filename="$(basename -- $filepath)"
+			sudo ./scripts/categorize-flows.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+		done
+	done
+fi
+
+# wait for all plotting scripts to complete
+synchronization_barrier "${plot_pids[@]}"
+plot_finish=`date +%s`
+plot_runtime=$((plot_finish-load_finish))
+echo "-I- run_pipeline: remaining plots finished in $plot_runtime (s)." > /dev/tty
+echo "-I- run_pipeline: remaining plots finished in $plot_runtime (s)."
+
+# move logs and graphs into results folder
+for i in "${profiles[@]}"; do
+	sudo mv w$i*.png results/W$i/plots
+	sudo mv w$i*timebounds.txt results/W$i/data
+	sudo mv w$i*mv_avg_bounds.txt results/W$i/data
+done
+
+if [ "$upload" = true ]; then
+
+	# copy results to gcloud storage
+	echo "-I- run_pipeline: transferring results to gcloud storage..." > /dev/tty
+	echo "-I- run_pipeline: transferring results to gcloud storage..."
+	sudo rm -f /etc/boto.cfg
+	for i in "${profiles[@]}"; do
+		sudo gsutil -m cp "$configfile" gs://homa-pbs/Simulations_$date/
+		sudo gsutil -m cp "$logfile" gs://homa-pbs/Simulations_$date/
+		sudo gsutil -m cp -r results/W$i/* gs://homa-pbs/Simulations_$date/W$i/
+		sudo gsutil -m cp -r tmp/W$i/*.xml gs://homa-pbs/Simulations_$date/W$i/data/
+		sudo gsutil -m cp -r tmp/W$i/*.load.tr gs://homa-pbs/Simulations_$date/W$i/data/
+	done
+
+fi # if upload
+
+if [ "$clean" = true ]; then
+
+	# clean out temporary files and results, but leave the logs
+	echo "-I- run_pipeline: removing local temporary files..." > /dev/tty
+	echo "-I- run_pipeline: removing local temporary files..."
+	for i in "${profiles[@]}"; do
+		sudo rm -f tmp/W$i/*
+		sudo rm -f results/W$i/plots/*
+		sudo rm -f results/W$i/data/*
+		sudo rm -f $ns3/results/W$i/*
+	done
+
+fi # if clean
+
+# print run stats
+finish=`date +%s`
+runtime=$((finish-start))
+echo "-I- run_pipeline: finished in $runtime (s)." > /dev/tty
+echo "-I- run_pipeline: finished in $runtime (s)."
+echo "-I- run_pipeline: output logged to: ${logfile}" > /dev/tty
+echo "-I- run_pipeline: output logged to: ${logfile}"
+
+# bring output back to the terminal, exit
+exec &>/dev/tty 
+exit
