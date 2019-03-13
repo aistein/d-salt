@@ -3,28 +3,42 @@
 #---------- begin user configurations -------------------------
 # ns3 build area
 ns3='./ns3.29-workspace-dev'
+
 # number of flows to send
 flows=300000
+
 # queue buffer size
 buff=42400
+
 # DCTCP threshold
 thresh=10
+
 # PBS Alpha Values
 alphas=(0 10 1000)
+
 # Workload Profiles
-profiles=(1)
+profiles=(1 2 3 4 5)
+
 # Desired Network Load
 load=0.8
+
 # Load Multipliers
 load_multipliers=(7 9.5 13 30 120) # 80% load multipliers
-	#load_multipliers=(8 10 14 34 125) # 90% load multipliers
-# Tag Addon
-addon="" # leave empty-string if not running parallel instances of this script, else "-<run name>"
+#load_multipliers=(8 10 14 34 125) # 90% load multipliers
+
+# Oversubscribed?
+oversub=false
+
+# Same DCTCP Thresholds?
+samethresh=true
+
+# Description of this Experiment
+description="80% Load, W1-W5, Same Thresh, 1:1 Subscription, Alpha=0,10,1000"
 
 # Plot Generation Switches
-run_simulations=false # if false, expects pre-populated tmp dir
-upload=false # if true, upload results to GCS
-clean=false # if true, remove all temporary files
+run_simulations=true # if false, expects pre-populated tmp dir
+upload=true # if true, upload results to GCS
+clean=true # if true, remove all temporary files
 categorize_flows=false # generate flow category plots
 without_dctcp=false # add "without_dctcp" to sims
 scatterplots=false # graph slowdown & fct scatters
@@ -47,7 +61,7 @@ scatterplots=false # graph slowdown & fct scatters
 
 
 # script start-time
-start=`date +%s`
+start=$(date +%s)
 
 # function to wait for a bunch of jobs to finish
 synchronization_barrier () {
@@ -58,31 +72,35 @@ synchronization_barrier () {
 }
 
 # date as UID for gcloud buckets
-date=`date +"%m_%d_%Y-%H-%M"`
+date=$(date +"%m_%d_%Y-%H-%M")
 
 # make necessary directories
-if [ ! -d "results" ]; then
-	for i in "${profiles[@]}"; do
-		mkdir -p results/W$i/plots
-		mkdir -p results/W$i/data
-		mkdir -p $ns3/results/W$i
-		mkdir -p tmp/W$i
-		mkdir -p logs/W$i
-	done
-fi
+directories=()
+for i in "${profiles[@]}"; do
+	directories+=("results/W$i/plots")
+	directories+=("results/W$i/data")
+	directories+=("$ns3/results/W$i")
+	directories+=("tmp/W$i")
+	directories+=("logs/W$i")
+done
+for dir in "${directories[@]}"; do
+	if [ ! -d "$dir" ]; then
+		mkdir -p "$dir"
+	fi
+done
 
 # clean out all old files from previous/local runs
 if [ "$clean" = true ]; then
 	for i in "${profiles[@]}"; do
-		sudo rm -f *timebounds.txt
-		sudo rm -f *mv_avg_bounds.txt
-		sudo rm -f *.png
-		sudo rm -f *.log
-        	sudo rm -f tmp/W$i/*
-		sudo rm -f logs/W$i/*
-        	sudo rm -f results/W$i/plots/*
-        	sudo rm -f results/W$i/data/*
-        	sudo rm -f $ns3/results/W$i/*
+		sudo rm -f *timebounds.txt*
+		sudo rm -f *mv_avg_bounds.txt*
+		sudo rm -f *.png*
+		sudo rm -f *.log*
+        	sudo rm -f tmp/W"$i"/*
+		sudo rm -f logs/W"$i"/*
+        	sudo rm -f results/W"$i"/plots/*
+        	sudo rm -f results/W"$i"/data/*
+        	sudo rm -f $ns3/results/W"$i"/*
 	done
 fi
 
@@ -97,11 +115,13 @@ configfile="./run_pipeline-${date}.config"
 echo "flows:        	$flows"				>> "$configfile"
 echo "buff:         	$buff" 				>> "$configfile"
 echo "thresh:       	$thresh" 			>> "$configfile"
-echo "alphas:       	(${alphas[@]})" 		>> "$configfile"
-echo "profiles:     	(${profiles[@]})" 		>> "$configfile"
+echo "alphas:       	(${alphas[*]})" 		>> "$configfile"
+echo "profiles:     	(${profiles[*]})" 		>> "$configfile"
 echo "load:         	$load" 				>> "$configfile"
-echo "load_multipliers: (${load_multipliers[@]})" 	>> "$configfile"
-echo "addon:        	$addon" 			>> "$configfile"
+echo "load_multipliers: (${load_multipliers[*]})" 	>> "$configfile"
+echo "samethresh:       $samethresh"			>> "$configfile"
+echo "oversub:       	$oversub"			>> "$configfile"
+echo "description:	$description"			>> "$configfile"
 
 # initialize pids array for new jobs
 sim_pids=()
@@ -129,9 +149,10 @@ if [ "$run_simulations" = true ]; then
 			args+=" --alpha=$A"
 			args+=" --thresh=$thresh"
 			args+=" --profile=$P"
-			args+=" --tag=a${A}${addon}"
+			args+=" --tag=a${A}"
 			args+=" --load=$load"
-			args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+ 			args+=" --oversub=$oversub"
+			args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 			echo "Running Sim with args: $args"
 			sudo ./waf --run "$args" & sim_pids+=("$!")
 	
@@ -143,9 +164,10 @@ if [ "$run_simulations" = true ]; then
 				args+=" --alpha=$A"
 				args+=" --useDctcp=false"
 				args+=" --profile=$P"
-				args+=" --tag=a${A}_nodctcp$addon"
+				args+=" --tag=a${A}_nodctcp"
+ 				args+=" --oversub=$oversub"
 				args+=" --load=$load"
-				args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+				args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 				echo "Running Sim with args: $args"
 				sudo ./waf --run "$args" & sim_pids+=("$!")
 			fi
@@ -153,7 +175,9 @@ if [ "$run_simulations" = true ]; then
 	done
 	
 	# Simulations Without PBS
-	thresh="$(($thresh*8))" # 8x DCTCP threshold for no-priority simulations
+ 	if [ "$samethresh" = false ]; then
+ 		thresh="$((thresh*8))" # 8x DCTCP threshold for no-priority simulations
+ 	fi
 	for P in "${profiles[@]}";
 	do
 		# With DCTCP
@@ -163,9 +187,10 @@ if [ "$run_simulations" = true ]; then
 		args+=" --usePbs=false"
 		args+=" --thresh=$thresh"
 		args+=" --profile=$P"
-		args+=" --tag=dctcp$addon"
+		args+=" --tag=dctcp"
+ 		args+=" --oversub=$oversub"
 		args+=" --load=$load"
-		args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+		args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 		echo "Running Sim with args: $args"
 		sudo ./waf --run "$args" & sim_pids+=("$!")
 	
@@ -177,9 +202,10 @@ if [ "$run_simulations" = true ]; then
 			args+=" --usePbs=false"
 			args+=" --useDctcp=false"
 			args+=" --profile=$P"
-			args+=" --tag=nopbs_nodctcp$addon"
+			args+=" --tag=nopbs_nodctcp"
+ 			args+=" --oversub=$oversub"
 			args+=" --load=$load"
-			args+=" --loadMultiplier=${load_multipliers[$(($P-1))]}"
+			args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 			echo "Running Sim with args: $args"
 			sudo ./waf --run "$args" & sim_pids+=("$!")
 		fi
@@ -190,7 +216,7 @@ if [ "$run_simulations" = true ]; then
 	echo "-I- run_pipeline: simulations deployed..." > /dev/tty
 	echo "-I- run_pipeline: simulations deployed..."
 	synchronization_barrier "${sim_pids[@]}"
-	sim_finish=`date +%s`
+	sim_finish=$(date +%s)
 	sim_runtime=$((sim_finish-start))
 	echo "-I- run_pipeline: simulations completed in $sim_runtime (s)." > /dev/tty
 	echo "-I- run_pipeline: simulations completed in $sim_runtime (s)."
@@ -203,12 +229,7 @@ fi # if run_simulations
 if [ "$run_simulations" = true ]; then
 	# move ns3 simulation outputs into local tmp directory
 	for i in "${profiles[@]}"; do
-		if [ "$addon" != "" ];
-		then
-			sudo mv $ns3/results/W$i/*${addon}* tmp/W$i
-		else
-			sudo mv $ns3/results/W$i/* tmp/W$i
-		fi
+ 		sudo mv $ns3/results/W"$i"/* tmp/W"$i"
 	done
 fi
 
@@ -216,17 +237,17 @@ echo "-I- run_pipeline: generating plots..." > /dev/tty
 echo "-I- run_pipeline: generating plots..."
 
 # calculate network loads & timebounds files
-load_start=`date +%s`
+load_start=$(date +%s)
 for i in "${profiles[@]}"; do
 	for filepath in tmp/W$i/*.load.tr; do
-		filename="$(basename -- $filepath)"
-		sudo ./scripts/calculate-network-load.py "$filepath" $load &> ./logs/W$i/${filename}.log & load_pids+=("$!")
+		filename="$(basename -- ${filepath})"
+		sudo ./scripts/calculate-network-load.py "$filepath" $load "$oversub" &> ./logs/W"$i"/${filename}.log & load_pids+=("$!")
 	done
 done
 
 # wait for load calculation to complete
 synchronization_barrier "${load_pids[@]}"
-load_finish=`date +%s`
+load_finish=$(date +%s)
 load_runtime=$((load_finish-load_start))
 echo "-I- run_pipeline: load plots finished in $load_runtime (s)." > /dev/tty
 echo "-I- run_pipeline: load plots finished in $load_runtime (s)."
@@ -234,8 +255,8 @@ echo "-I- run_pipeline: load plots finished in $load_runtime (s)."
 # calculate priority distirbution histograms
 for i in "${profiles[@]}"; do
 	for filepath in tmp/W$i/*.prio; do
-		filename="$(basename -- $filepath)"
-		sudo ./scripts/histogram.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+		filename="$(basename -- ${filepath})"
+		sudo ./scripts/histogram.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
 	done
 done
 
@@ -243,9 +264,9 @@ done
 if [ "$scatterplots" = true ]; then
 	for i in "${profiles[@]}"; do
 		for filepath in tmp/W$i/*.xml; do
-			filename="$(basename -- $filepath)"
-			sudo ./scripts/slowdown-stats.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
-			sudo ./scripts/raw-completion.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+			filename="$(basename -- ${filepath})"
+			sudo ./scripts/slowdown-stats.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
+			sudo ./scripts/raw-completion.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
 		done
 	done
 fi
@@ -263,8 +284,8 @@ for i in "${profiles[@]}"; do
 			args+=("${prefix}_a${a}_nodctcp.xml")
 		fi
 	done
-	sudo ./scripts/fct-all-alpha.py "${args[@]}" &> ./logs/W$i/w${i}_fct-all-alpha.log & plot_pids+=("$!")
-	sudo ./scripts/fct-cdf.py "${args[@]}" &> ./logs/W$i/w${i}_fct-cdf.log & plot_pids+=("$!")
+	sudo ./scripts/fct-all-alpha.py "${args[@]}" &> ./logs/W"$i"/w${i}_fct-all-alpha.log & plot_pids+=("$!")
+	sudo ./scripts/fct-cdf.py "${args[@]}" &> ./logs/W"$i"/w${i}_fct-cdf.log & plot_pids+=("$!")
 	#sudo ./scripts/slowdown-all-alpha.py "${args[@]}" &> ./logs/W$i/w${i}_slowdown-all-alpha.log & plot_pids+=("$!")
 done
 
@@ -272,24 +293,23 @@ done
 if [ "$categorize_flows" = true ]; then
 	for i in "${profiles[@]}"; do
 		for filepath in tmp/W$i/*.categories; do
-			filename="$(basename -- $filepath)"
-			sudo ./scripts/categorize-flows.py "$filepath" &> ./logs/W$i/${filename}.log & plot_pids+=("$!")
+			filename="$(basename -- ${filepath})"
+			sudo ./scripts/categorize-flows.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
 		done
 	done
 fi
 
 # wait for all plotting scripts to complete
 synchronization_barrier "${plot_pids[@]}"
-plot_finish=`date +%s`
+plot_finish=$(date +%s)
 plot_runtime=$((plot_finish-load_finish))
 echo "-I- run_pipeline: remaining plots finished in $plot_runtime (s)." > /dev/tty
 echo "-I- run_pipeline: remaining plots finished in $plot_runtime (s)."
 
 # move logs and graphs into results folder
 for i in "${profiles[@]}"; do
-	sudo mv w$i*.png results/W$i/plots
-	sudo mv w$i*timebounds.txt results/W$i/data
-	sudo mv w$i*mv_avg_bounds.txt results/W$i/data
+	sudo mv w"$i"*.png results/W$i/plots
+	sudo mv w"$i"*timebounds.txt results/W$i/data
 done
 
 if [ "$upload" = true ]; then
@@ -299,11 +319,12 @@ if [ "$upload" = true ]; then
 	echo "-I- run_pipeline: transferring results to gcloud storage..."
 	sudo rm -f /etc/boto.cfg
 	for i in "${profiles[@]}"; do
-		sudo gsutil -m cp "$configfile" gs://homa-pbs/Simulations_$date/
-		sudo gsutil -m cp "$logfile" gs://homa-pbs/Simulations_$date/
-		sudo gsutil -m cp -r results/W$i/* gs://homa-pbs/Simulations_$date/W$i/
-		sudo gsutil -m cp -r tmp/W$i/*.xml gs://homa-pbs/Simulations_$date/W$i/data/
-		sudo gsutil -m cp -r tmp/W$i/*.load.tr gs://homa-pbs/Simulations_$date/W$i/data/
+		sudo gsutil -m cp "$configfile" gs://homa-pbs/Simulations_"$date"/
+		sudo gsutil -m cp "$logfile" gs://homa-pbs/Simulations_"$date"/
+ 		sudo gsutil -m cp -r logs/W"$i"/* gs://homa-pbs/Simulations_"$date"/W"$i"/logs/
+		sudo gsutil -m cp -r results/W"$i"/* gs://homa-pbs/Simulations_"$date"/W"$i"/
+		sudo gsutil -m cp -r tmp/W"$i"/*.xml gs://homa-pbs/Simulations_"$date"/W"$i"/data/
+		sudo gsutil -m cp -r tmp/W"$i"/*.load.tr gs://homa-pbs/Simulations_"$date"/W"$i"/data/
 	done
 
 fi # if upload
@@ -314,16 +335,16 @@ if [ "$clean" = true ]; then
 	echo "-I- run_pipeline: removing local temporary files..." > /dev/tty
 	echo "-I- run_pipeline: removing local temporary files..."
 	for i in "${profiles[@]}"; do
-		sudo rm -f tmp/W$i/*
-		sudo rm -f results/W$i/plots/*
-		sudo rm -f results/W$i/data/*
-		sudo rm -f $ns3/results/W$i/*
+		sudo rm -f tmp/W"$i"/*
+		sudo rm -f results/W"$i"/plots/*
+		sudo rm -f results/W"$i"/data/*
+		sudo rm -f $ns3/results/W"$i"/*
 	done
 
 fi # if clean
 
 # print run stats
-finish=`date +%s`
+finish=$(date +%s)
 runtime=$((finish-start))
 echo "-I- run_pipeline: finished in $runtime (s)." > /dev/tty
 echo "-I- run_pipeline: finished in $runtime (s)."

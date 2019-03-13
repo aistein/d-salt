@@ -14,6 +14,7 @@ import matplotlib.pylab as plt
 try:
     filename = sys.argv[1]
     desired_load = float(sys.argv[2])
+    oversub = bool(sys.argv[3])
     if desired_load > 1.0:
         print "required: desired_load <= 1.0"
         exit(1)
@@ -23,6 +24,8 @@ except IndexError:
 
 SIM_TIMESTEP = 1e-6 # each bucket represents 1 microseconds of simulation time
 INTERVAL_MAX_RATE = 1440e9 * SIM_TIMESTEP
+if oversub:
+     INTERVAL_MAX_RATE /= 2 # assumes 2:1 oversubscription
 
 # Functions for Edge Detection
 # credit: http://sam-koblenski.blogspot.com/2015/09/everyday-dsp-for-programmers-edge.html

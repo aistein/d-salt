@@ -10,6 +10,9 @@ from tabulate import tabulate
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+#import matplotlib.ticker as ticker
+matplotlib.rcParams['font.size'] = 14
+
 try:
     from xml.etree import cElementTree as ElementTree
 except ImportError:
@@ -247,11 +250,13 @@ def main(argv):
 
     sim_list = []
     sim_names = []
+    sim_profiles = []
     sim_timebounds = [] # in microseconds
     for i, xmlfile in enumerate(argv[1:]):
         file_obj = open(xmlfile)
         raw_simname = xmlfile.split("/")[2].split(".")[0].split("_")
         sim_profile = raw_simname[0]
+        sim_profiles.append(int(sim_profile[1]))
         sim_tag = "_".join(raw_simname[1:])
         sim_names.append(sim_tag)
         #sim_names.append("_".join(xmlfile.split("/")[2].split(".")[0].split("_")[1:]))
@@ -278,7 +283,7 @@ def main(argv):
         print " done."
 
     colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
-    markers = ["x", "o", "v", "s"]
+    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
 
     # replace 'a's with greek 'alpha's
     for i, sim_name in enumerate(sim_names):
@@ -286,9 +291,13 @@ def main(argv):
             sim_names[i] = r'$\alpha$' + ' = ' + sim_name[1:]
 
     # 99-Percentile
+    fig, ax = plt.subplots()
+    plt.yticks(rotation=45)
+    offset = 0.0
     for i, sim in enumerate(sim_list):
         flows_of_interest = []
         flowsizes = []
+        workload = sim_profiles[i]
 
 	# DO NOT INCLUDE ACKs, Constrain Simulation Time to Steady-State Utilization Periods
         min_time = sim_timebounds[i][0]
@@ -346,21 +355,25 @@ def main(argv):
 	#flowSizes99 = [fsize/8.0 for fsize,_ in sorted(fcts_99p.items())]
 	flowSizes99 = [fsize for fsize,_ in sorted(fcts_99p.items())]
         print "flowSizes_99: ", flowSizes99
-        flowDuration99 = [fct for _,fct in sorted(fcts_99p.items())]
+        flowDuration99 = [fct * 1e6 for _,fct in sorted(fcts_99p.items())] # to microseconds
         print "flowDuration99: ", flowDuration99
-        plt.plot(flowSizes99, flowDuration99, colors[i], linestyle='-', marker=markers[i], markevery=2,
-                label=sim_names[i]+"_99p")
+        offset += 0.02
+        plt.plot(flowSizes99, flowDuration99, colors[i], linestyle='-', marker=markers[i], markevery=0.1+offset,
+                label=sim_names[i], markersize=10, linewidth='2')
 
-    plt.title(argv[1].split("/")[2].split(".")[0].split("_")[0] + " - Flow Size vs. 99% Flow Completion Time")
-    plt.xlabel("Flow Size (bytes)")
-    plt.ylabel("Completion Time (s)")
+    #plt.rcParams.update({'font.size': 16})
+    #plt.title(argv[1].split("/")[2].split(".")[0].split("_")[0] + " - Flow Size vs. 99% Flow Completion Time")
+    plt.xlabel("Flow Size (bytes)", fontsize=16)
+    plt.ylabel("Completion Time (us)", fontsize=16)
+    #ax.yaxis.set_minor_formatter(ticker.LogFormatter(labelOnlyBase=False))
+    #ax.yaxis.set_major_formatter(ticker.LogFormatter(labelOnlyBase=False))
     plt.yscale('log')
     plt.xscale('log')
     plt.legend()
     outfilename = argv[1].split("/")[2].split(".")[0].split("_")[0] + "_fct_99p_all.png"
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.savefig(outfilename)
+    plt.savefig(outfilename, dpi=600)
     plt.clf()
 
 if __name__ == '__main__':
