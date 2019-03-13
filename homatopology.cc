@@ -48,6 +48,7 @@
 #include "ns3/packet.h"
 #include "ns3/packet-filter.h"
 #include "ns3/pbs.h"
+#include "ns3/traffic-control-module.h"
 #include "ns3/traffic-control-helper.h"
 #include "ns3/prioTag.h"
 #include "ns3/pbs-switch.h"
@@ -358,8 +359,8 @@ int main(int argc, char *argv[])
 // Initialize PointtoPoint helper
 //	
 	PointToPointHelper p2p_edgeToAgg;
-  	//p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("40"+rateUnits));
-  	p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("20"+rateUnits)); // Oversubscription 2:1
+  	p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("40"+rateUnits));
+  	//p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("20"+rateUnits)); // Oversubscription 2:1
   	p2p_edgeToAgg.SetChannelAttribute ("Delay", StringValue ("100ns"));
 			     
 // Installations...
