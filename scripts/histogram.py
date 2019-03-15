@@ -7,6 +7,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 matplotlib.rcParams['font.size'] = 16
+matplotlib.rcParams['xtick.labelsize'] = 14
+matplotlib.rcParams['ytick.labelsize'] = 14
 
 try:
     filename = sys.argv[1]
@@ -48,6 +50,7 @@ with open(filename, 'r') as f:
     plt.ylabel("Cumulative Bytes", fontsize=16)
     plt.tight_layout()
     plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    plt.xticks([k for k in range(0,8)], ('0(Hi)', '1', '2', '3', '4', '5', '6', '7(Lo)'), rotation=20)
     outfilename = testname + "_prioDist.png"
     plt.savefig(outfilename, dpi=600)
     plt.clf()

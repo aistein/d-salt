@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <tuple>
+#include "ns3/fatal-error.h"
 #include "ns3/string.h"
 #include "ns3/simulator.h"
 #include "ns3/queue-disc.h"
@@ -200,6 +201,14 @@ namespace ns3 {
 			case 5: // W5 (alpha = 10)
 				limits = {1.2e-21, 2.7e-27, 6e-33, 1.3e-38, 3e-44, 6.5e-50, 1.4e-55, 3.2e-61};
 				break;
+			case 6: // Incast 
+				limits = {2.6e-21, 1.2e-26, 5.3e-32, 2.4e-37, 1.1e-42, 4.9e-48, 2.2e-53, 1e-58};
+				break;
+			case 7: // background flows
+				limits = {1.2e-21, 2.7e-27, 6e-33, 1.3e-38, 3e-44, 6.5e-50, 1.4e-55, 3.2e-61};
+				break;
+			default:
+				NS_FATAL_ERROR("invalid profile specified.");
 		}
 		for (int i=0; i<8; i++) {
 			m_prioLimits[i] = limits[i];

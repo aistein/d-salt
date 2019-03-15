@@ -10,10 +10,11 @@ from tabulate import tabulate
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-#import matplotlib.ticker as ticker
+import matplotlib.patches as patches
 matplotlib.rcParams['font.size'] = 16
 matplotlib.rcParams['xtick.labelsize'] = 14
 matplotlib.rcParams['ytick.labelsize'] = 14
+from scipy.stats import norm
 
 try:
     from xml.etree import cElementTree as ElementTree
@@ -24,13 +25,6 @@ def parse_time_ns(tm):
     if tm.endswith('ns'):
         return long(tm[:-4])
     raise ValueError(tm)
-
-def legalFlowSize(workload, size):
-    if workload == 5:
-        return size >= 1000 and size <= 20000000
-    if workload == 4:
-        return size >= 600 and size <= 10000000
-    return True # don't have this problem for plotting W1-W3
 
 BOTTLENECK_RATE = 10e9 # 10Gbps
 PERCENTILE_CUTOFF = 99
@@ -103,8 +97,6 @@ class Flow(object):
     #  five tuple
     ## @var packetSizeMean
     #  packet size mean
-    ## @var packetCount
-    #  number of packets sent
     ## @var probe_stats_unsorted
     #  unsirted probe stats
     ## @var size
@@ -119,8 +111,6 @@ class Flow(object):
     #  ratio of actual to optimal flow duration
     ## @var rawDuration
     #  actual duration of flow
-    ## @var optDuration
-    #  optimal duration for a flow of this size in our topology
     ## @var start
     #  starting time of flow in seconds
     ## @var finish
@@ -128,9 +118,9 @@ class Flow(object):
     ## @var __slots__
     #  class variable list
     __slots__ = ['flowId', 'delayMean', 'packetLossRatio', 'rxBitrate', 'txBitrate',
-                 'fiveTuple', 'packetSizeMean', 'packetCount', 'probe_stats_unsorted', 'size',
+                 'fiveTuple', 'packetSizeMean', 'probe_stats_unsorted', 'size',
                  'hopCount', 'flowInterruptionsHistogram', 'rx_duration', 'slowdown', 'rawDuration',
-                 'optDuration', 'start', 'finish']
+                 'start', 'finish']
     def __init__(self, flow_el):
         ''' The initializer.
         @param self The object pointer.
@@ -139,37 +129,28 @@ class Flow(object):
         self.flowId = int(flow_el.get('flowId'))
         rxPackets = long(flow_el.get('rxPackets'))
         txPackets = long(flow_el.get('txPackets'))
-        #start = long(flow_el.get('timeFirstTxPacket')[:-4]) * 1.0e-9
-        start = long(flow_el.get('timeFirstRxPacket')[:-4]) * 1.0e-9
+        start = long(flow_el.get('timeFirstTxPacket')[:-4]) * 1.0e-9
         finish = long(flow_el.get('timeLastRxPacket')[:-4]) * 1.0e-9
 	tx_duration = float(long(flow_el.get('timeLastTxPacket')[:-4]) - long(flow_el.get('timeFirstTxPacket')[:-4]))*1e-9
         rx_duration = float(long(flow_el.get('timeLastRxPacket')[:-4]) - long(flow_el.get('timeFirstRxPacket')[:-4]))*1e-9
 	actual_duration = float(long(flow_el.get('timeLastRxPacket')[:-4]) - long(flow_el.get('timeFirstTxPacket')[:-4]))*1e-9
-        # known NS3 error that Rx time and Tx time can't be reliably compared
-	#actual_duration = rx_duration
 	flowsize_bits = float(long(flow_el.get('txBytes')))*8.0
 	agg_capacity = float(40e9)
 	edge_capacity = float(10e9)
 	host_proc_delay = 1.5e-6
-        h2e_prop_delay = 10e-9  # delay to travel the length of cable (host-to-edge)
-        e2a_prop_delay = 100e-9  # delay to travel the length of cable (edge-to-agg)
+        prop_delay = 2e-6  # delay to travel the length of cable
         processing_delay = 250e-9   # delay for a packet to be processed by the switch software
-	#optimal_flow_duration = float(2.0*flowsize_bits/edge_capacity) + float(2.0*flowsize_bits/agg_capacity)
-        h2e_delay_component = float(2.0 * (h2e_prop_delay + flowsize_bits/edge_capacity))
-        e2a_delay_component = float(2.0 * (e2a_prop_delay + flowsize_bits/agg_capacity))
-        optimal_flow_duration = h2e_delay_component + e2a_delay_component
-
+	optimal_flow_duration = float(2.0*flowsize_bits/edge_capacity) + float(2.0*flowsize_bits/agg_capacity)
+        log_base = 10
         slowdown_raw = actual_duration / optimal_flow_duration
 
         self.slowdown = slowdown_raw
         self.rawDuration = actual_duration
-        self.optDuration = optimal_flow_duration
 
         self.start = start
         self.finish = finish
 
         self.size = long(flow_el.get('txBytes'))
-        self.packetCount = rxPackets
         self.rx_duration = rx_duration
         self.probe_stats_unsorted = []
         if rxPackets:
@@ -255,26 +236,39 @@ class Simulation(object):
                 flow_map[flowId].probe_stats_unsorted.append(s)
 
 
+# Function to Fix Step and the end of CDFs
+# StackOverflow Credit: https://stackoverflow.com/a/52921726/3341596
+def fix_hist_step_vertical_line_at_end(ax):
+    axpolygons = [poly for poly in ax.get_children() if isinstance(poly, patches.Polygon)]
+    for poly in axpolygons:
+                poly.set_xy(poly.get_xy()[:-1])
+
 def main(argv):
 
-    sim_list = []
+    if len(argv) < 2:
+        print "usage: ./incast_whiskers.py <path to tmp incast folder>"
+        exit(1)
+
     sim_names = []
-    sim_profiles = []
-    sim_timebounds = [] # in microseconds
-    for i, xmlfile in enumerate(argv[1:]):
-        file_obj = open(xmlfile)
-        raw_simname = xmlfile.split("/")[2].split(".")[0].split("_")
+    dctcp_sim_dict = {}
+    pbs_sim_dict = {}
+    path = argv[1]
+    for i, xmlfile in enumerate(os.listdir(path)): # send in entire incast directory
+        if xmlfile.split('.')[1] != 'xml':
+            continue
+        file_obj = open(os.path.join(path,xmlfile))
+        # names look like "tmp/incast/incast_a10_s128.xml"
+        raw_simname = xmlfile.split(".")[0].split("_")
         sim_profile = raw_simname[0]
-        sim_profiles.append(int(sim_profile[1]))
-        sim_tag = "_".join(raw_simname[1:])
-        sim_names.append(sim_tag)
-        #sim_names.append("_".join(xmlfile.split("/")[2].split(".")[0].split("_")[1:]))
+        is_dctcp = raw_simname[1] == 'dctcp'
+        if is_dctcp == True:
+            sim_alpha = 'dctcp' 
+        else:
+            sim_alpha = r'$\alpha$' + ' = ' + raw_simname[1][1:]
+        sim_incasters = int(raw_simname[2][1:])
+        sim_names.append(sim_alpha + ", degree = " + str(sim_incasters))
         print "_".join(raw_simname)
-        print "Reading Timebounds file"
-        timebounds_file = "_".join(raw_simname) + "_timebounds.txt"
-        with open(timebounds_file, 'r') as tbf:
-            sim_timebounds.append( ( long(tbf.readline().strip()), long(tbf.readline().strip()) ) )
-        print "Reading XML file"
+        print "Reading XML file \n",
  
         sys.stdout.flush()        
         level = 0
@@ -285,102 +279,64 @@ def main(argv):
                 level -= 1
                 if level == 0 and elem.tag == 'FlowMonitor':
                     sim = Simulation(elem)
-                    sim_list.append(sim)
+                    if is_dctcp == True:
+                        dctcp_sim_dict[sim_incasters] = sim
+                    else:
+                        pbs_sim_dict[sim_incasters] = sim
                     elem.clear() # won't need this any more
                     sys.stdout.write(".")
                     sys.stdout.flush()
         print " done."
 
-    colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
-    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
-
-    # replace 'a's with greek 'alpha's
-    for i, sim_name in enumerate(sim_names):
-        if sim_name[0] == 'a':
-            sim_names[i] = r'$\alpha$' + ' = ' + sim_name[1:]
-
-    # 99-Percentile
+    # FCT BoxPlot
     fig, ax = plt.subplots()
-    plt.yticks(rotation=45)
-    offset = 0.0
-    for i, sim in enumerate(sim_list):
+
+    dctcp_data = []
+    for i, sim in sorted(dctcp_sim_dict.items()):
         flows_of_interest = []
         flowsizes = []
-        workload = sim_profiles[i]
 
-	# DO NOT INCLUDE ACKs, Constrain Simulation Time to Steady-State Utilization Periods
-        min_time = sim_timebounds[i][0]
-        max_time = sim_timebounds[i][1]
-        errant_flow_count = 0
-        negative_flow_count = 0
-        microseconds = lambda t: t * 1.0e6
+	# DO NOT INCLUDE ACKs
         for flow in sim.flows:
-            if flow.rawDuration < 0:
-                negative_flow_count += 1
-                continue
-            if flow.rawDuration < flow.optDuration:
-                #print "-E- measured duration {} < theoretically optimal duration {}".format(
-                #        flow.rawDuration, flow.optDuration)
-                #print "\t-I- packets sent in errant flow {}".format(flow.packetCount)
-                errant_flow_count += 1
-                #continue
-            if microseconds(flow.start) >= min_time and microseconds(flow.finish) <= max_time:
-                if flow.fiveTuple.sourcePort != 9 and legalFlowSize(workload, flow.size):
-                    flows_of_interest.append( flow )
+            if flow.fiveTuple.sourcePort != 9:
+                flows_of_interest.append( flow )
 
-        print "foi len = ", len(flows_of_interest)
-        print "super-optimal flows (counted) = ", errant_flow_count
-        print "negative flows (not counted) = ", negative_flow_count
-        # Break down CT by buckets
+        # Get FCTs for this incast scenario
+        fcts = []
+        for flow in flows_of_interest:
+            if flow.rawDuration > 0:
+                fcts.append(float(flow.rawDuration))
+        dctcp_data.append( np.percentile(fcts, 99) )
+
+    pbs_data = []
+    for i, sim in sorted(pbs_sim_dict.items()):
+        #print "processing pbs data for {} servers".format(i)
+        flows_of_interest = []
         flowsizes = []
-        for flow in flows_of_interest:
-            flowsizes.append(long(flow.size))
-        print "fss len = ", len(flowsizes)
-        # 10 logspace buckets by flowsize
-        print "max fs = ", max(flowsizes)
-        print "min fs = ", min(flowsizes)
-        buckets = np.logspace(np.log10(min(flowsizes)), np.log10(max(flowsizes)), num=11, base=10, dtype=long)
-        print "buckets = ", buckets[:-2]
-        # Buckets of Completion Time organized by Size
-        completion_by_bucket = defaultdict(list)
-        for flow in flows_of_interest:
-            found = False
-            for fsize in buckets[:-2]:
-                if flow.size <= fsize:
-                    completion_by_bucket[fsize].append(flow.rawDuration)
-                    found = True
-                    break
-            if not found:
-                fsize = buckets[-2]
-                completion_by_bucket[fsize].append(flow.rawDuration)
-        # 99th Percentile FCT for each Bucket
-        fcts_99p = defaultdict(float)
-        for fsize, fcts in completion_by_bucket.items():
-            if len(fcts) >= 4:
-                fcts_99p[fsize] = np.percentile(sorted(fcts), 99) 
-            else:
-                print "-E- not enough samples in bucket {}".format(fsize)
 
-	#flowSizes99 = [fsize/8.0 for fsize,_ in sorted(fcts_99p.items())]
-	flowSizes99 = [fsize for fsize,_ in sorted(fcts_99p.items())]
-        print "flowSizes_99: ", flowSizes99
-        flowDuration99 = [fct * 1e6 for _,fct in sorted(fcts_99p.items())] # to microseconds
-        print "flowDuration99: ", flowDuration99
-        offset += 0.02
-        plt.plot(flowSizes99, flowDuration99, colors[i%10], linestyle='-', marker=markers[i%11], markevery=0.1+offset,
-                label=sim_names[i], markersize=10, linewidth='2')
+	# DO NOT INCLUDE ACKs
+        for flow in sim.flows:
+            if flow.fiveTuple.sourcePort != 9:
+                flows_of_interest.append( flow )
 
-    #plt.rcParams.update({'font.size': 16})
-    #plt.title(argv[1].split("/")[2].split(".")[0].split("_")[0] + " - Flow Size vs. 99% Flow Completion Time")
-    plt.xlabel("Flow Size (bytes)", fontsize=16)
-    plt.ylabel("Completion Time (us)", fontsize=16)
-    #ax.yaxis.set_minor_formatter(ticker.LogFormatter(labelOnlyBase=False))
-    #ax.yaxis.set_major_formatter(ticker.LogFormatter(labelOnlyBase=False))
-    plt.yscale('log')
-    plt.xscale('log')
+        # Get FCTs for this incast scenario
+        fcts = []
+        for flow in flows_of_interest:
+            if flow.rawDuration > 0:
+                fcts.append(float(flow.rawDuration))
+        pbs_data.append( np.percentile(fcts, 99) )
+
+    print "pbs_data size: ", len(pbs_data)
+    print "dctcp_data size: ", len(dctcp_data)
+    plt.plot( [i for i in range(len(pbs_data))], pbs_data, linestyle='-', marker="o", markevery=0.1,
+            label="D-SALT")
+    plt.plot( [i for i in range(len(dctcp_data))], dctcp_data, linestyle='-', marker="x", markevery=0.1,
+            label="DCTCP")
+    plt.ylabel("Flow Completion Time 99th (s)", fontsize=16)
+    plt.xlabel("Number of Incast Senders", fontsize=16)
+    plt.xticks([k for k in range(1,129)], (str(k) if k%16 == 0 else "" for k in range(1,129)), rotation=20)
+    outfilename = "incast-128_fcts_99p.png"
     plt.legend()
-    outfilename = argv[1].split("/")[2].split(".")[0].split("_")[0] + "_fct_99p_all.png"
-    plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(outfilename, dpi=600)
     plt.clf()

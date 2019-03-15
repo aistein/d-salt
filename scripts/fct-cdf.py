@@ -12,7 +12,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from scipy.stats import norm
-matplotlib.rcParams['font.size'] = 14
+matplotlib.rcParams['font.size'] = 16
+matplotlib.rcParams['xtick.labelsize'] = 14
+matplotlib.rcParams['ytick.labelsize'] = 14
 
 try:
     from xml.etree import cElementTree as ElementTree
@@ -316,8 +318,8 @@ def main(argv):
         #y = norm.cdf(x, mu, sigma)
 
         offset += 0.02
-        cdf,bins,_ = plt.hist(fcts, bins=x, density=True, alpha=0.5, color=colors[i], linestyle='-', histtype='step', cumulative=True, label=None)
-        plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i], marker=markers[i], markevery=0.1+offset, markersize=10, linewidth='2')
+        cdf,bins,_ = plt.hist(fcts, bins=x, density=True, alpha=0.5, color=colors[i%10], linestyle='-', histtype='step', cumulative=True, label=None)
+        plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i%10], marker=markers[i%11], markevery=0.1+offset, markersize=10, linewidth='2')
         #plt.plot(x, y, color=colors[i], linestyle='--', alpha=0.5, label=sim_names[i]+'_norm')
 
     #plt.rcParams.update({'font.size': 16})

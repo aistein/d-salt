@@ -4,6 +4,9 @@
 # ns3 build area
 ns3='./ns3.29-workspace-dev'
 
+# number of processors on this machine
+processors=10
+
 # number of flows to send
 flows=300000
 
@@ -14,28 +17,29 @@ buff=42400
 thresh=10
 
 # PBS Alpha Values
-alphas=(0 10 1000)
+alphas=(0 1 5 7 10 15 80 200 400 800 1000)
 
 # Workload Profiles
-profiles=(1 2 3 4 5)
+profiles=(5)
 
 # Desired Network Load
 load=0.8
 
 # Load Multipliers
-load_multipliers=(7 9.5 13 30 120) # 80% load multipliers
+load_multipliers=(3.5 4 5 6 7) # 1:1 samethresh @80% load mutlipliers
+#load_multipliers=(7 9.5 13 30 120) # 80% load multipliers
 #load_multipliers=(8 10 14 34 125) # 90% load multipliers
 
 # Oversubscribed?
 oversub=false
 
 # Same DCTCP Thresholds?
-samethresh=true
+samethresh=false
 
 # Description of this Experiment
-description="80% Load, W1-W5, Same Thresh, 1:1 Subscription, Alpha=0,10,1000"
+description="80% Load, W1, 1:1 Subscription, Seeking Optimal"
 
-# Plot Generation Switches
+# Pipeline Script Control Switches
 run_simulations=true # if false, expects pre-populated tmp dir
 upload=true # if true, upload results to GCS
 clean=true # if true, remove all temporary files
@@ -123,10 +127,11 @@ echo "samethresh:       $samethresh"			>> "$configfile"
 echo "oversub:       	$oversub"			>> "$configfile"
 echo "description:	$description"			>> "$configfile"
 
-# initialize pids array for new jobs
+# initialize pids arrays for new jobs, and zero proccount
 sim_pids=()
 load_pids=()
 plot_pids=()
+proccount=0
 
 # if "run_simulations" is disabled, "tmp/..." directories are expected to be pre-populated
 if [ "$run_simulations" = true ]; then
@@ -142,6 +147,12 @@ if [ "$run_simulations" = true ]; then
 	do
 		for P in "${profiles[@]}";
 		do
+			proccount=$(($proccount+1))
+			if [ $proccount == $processors ]; then
+				synchronization_barrier "${sim_pids[@]}"
+				sim_pids=()
+				proccount=1
+			fi
 			# With DCTCP
 			args="scratch/homatopology"
 			args+=" --apps=$flows"
@@ -158,6 +169,12 @@ if [ "$run_simulations" = true ]; then
 	
 			# Without DCTCP
 			if [ "$without_dctcp" = true ]; then
+				proccount=$(($proccount+1))
+				if [ $proccount == $processors ]; then
+					synchronization_barrier "${sim_pids[@]}"
+					sim_pids=()
+					proccount=1
+				fi
 				args="scratch/homatopology"
 				args+=" --apps=$flows"
 				args+=" --buff=$buff"
@@ -180,6 +197,12 @@ if [ "$run_simulations" = true ]; then
  	fi
 	for P in "${profiles[@]}";
 	do
+		proccount=$(($proccount+1))
+		if [ $proccount == $processors ]; then
+			synchronization_barrier "${sim_pids[@]}"
+			sim_pids=()
+			proccount=1
+		fi
 		# With DCTCP
 		args="scratch/homatopology"
 		args+=" --apps=$flows"
@@ -196,6 +219,12 @@ if [ "$run_simulations" = true ]; then
 	
 		# Without DCTCP
 		if [ "$without_dctcp" = true ]; then
+			proccount=$(($proccount+1))
+			if [ $proccount == $processors ]; then
+				synchronization_barrier "${sim_pids[@]}"
+				sim_pids=()
+				proccount=1
+			fi
 			args="scratch/homatopology"
 			args+=" --apps=$flows"
 			args+=" --buff=$buff"
@@ -240,6 +269,12 @@ echo "-I- run_pipeline: generating plots..."
 load_start=$(date +%s)
 for i in "${profiles[@]}"; do
 	for filepath in tmp/W$i/*.load.tr; do
+		proccount=$(($proccount+1))
+		if [ $proccount == $processors ]; then
+			synchronization_barrier "${load_pids[@]}"
+			load_pids=()
+			proccount=1
+		fi
 		filename="$(basename -- ${filepath})"
 		sudo ./scripts/calculate-network-load.py "$filepath" $load "$oversub" &> ./logs/W"$i"/${filename}.log & load_pids+=("$!")
 	done
@@ -255,6 +290,12 @@ echo "-I- run_pipeline: load plots finished in $load_runtime (s)."
 # calculate priority distirbution histograms
 for i in "${profiles[@]}"; do
 	for filepath in tmp/W$i/*.prio; do
+		proccount=$(($proccount+1))
+		if [ $proccount == $processors ]; then
+			synchronization_barrier "${plot_pids[@]}"
+			plot_pids=()
+			proccount=1
+		fi
 		filename="$(basename -- ${filepath})"
 		sudo ./scripts/histogram.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
 	done
@@ -264,6 +305,12 @@ done
 if [ "$scatterplots" = true ]; then
 	for i in "${profiles[@]}"; do
 		for filepath in tmp/W$i/*.xml; do
+			proccount=$(($proccount+1))
+			if [ $proccount == $processors ]; then
+				synchronization_barrier "${plot_pids[@]}"
+				plot_pids=()
+				proccount=1
+			fi
 			filename="$(basename -- ${filepath})"
 			sudo ./scripts/slowdown-stats.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
 			sudo ./scripts/raw-completion.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
@@ -273,6 +320,12 @@ fi
 
 # graph slowdown and completion 99th percentiles superimposed alphas
 for i in "${profiles[@]}"; do
+	proccount=$(($proccount+1))
+	if [ $proccount == $processors ]; then
+		synchronization_barrier "${plot_pids[@]}"
+		plot_pids=()
+		proccount=1
+	fi
 	prefix="tmp/W$i/w$i"
 	args=("${prefix}_dctcp.xml")
 	if [ "$without_dctcp" = true ]; then
@@ -293,6 +346,12 @@ done
 if [ "$categorize_flows" = true ]; then
 	for i in "${profiles[@]}"; do
 		for filepath in tmp/W$i/*.categories; do
+			proccount=$(($proccount+1))
+			if [ $proccount == $processors ]; then
+				synchronization_barrier "${plot_pids[@]}"
+				plot_pids=()
+				proccount=1
+			fi
 			filename="$(basename -- ${filepath})"
 			sudo ./scripts/categorize-flows.py "$filepath" &> ./logs/W"$i"/${filename}.log & plot_pids+=("$!")
 		done
