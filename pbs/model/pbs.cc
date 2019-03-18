@@ -14,6 +14,7 @@
 #include "ns3/queue-disc.h"
 #include "ns3/uinteger.h"
 #include "ns3/pointer.h"
+#include "ns3/tcp-header.h"
 #include "ns3/application-container.h"
 #include "ns3/socket.h"
 #include "ns3/address.h"
@@ -283,60 +284,71 @@ namespace ns3 {
 		double raw_prio;
 		uint8_t bin_prio;
 		uint32_t packetsize = item->GetSize();
-
-		const_cast<PbsPacketFilter*>(this)->m_totalBytes += packetsize;
-		const_cast<PbsPacketFilter*>(this)->GetLoadStats () += packetsize;
-
-		FlowStats &ref = const_cast<PbsPacketFilter*>(this)->GetStatsForFlow(flowId);
-
-		bool firstFlag = false;
-		if (ref.firstTx == true)
-		{
-			ref.timeFirstTxPacket = Simulator::Now();
-			ref.firstTx = false;
-			firstFlag = true;
-			if (m_nonBlind) {
-				FlowSizeTag flowSizeTag;
-				Ptr<Packet> pkt = item->GetPacket ();
-				if (pkt->RemovePacketTag (flowSizeTag)) {
-					ref.flowSize = flowSizeTag.GetFlowSize ();
-				}
-			}
-		}
-		ref.txBytes += packetsize;
-		ref.txPackets++;
-		ref.timeLastTxPacket = Simulator::Now();
-		ref.flowAge = ref.timeLastTxPacket - ref.timeFirstTxPacket;
-
-		if (!m_usePbs) {
-			bin_prio = 0; // No PBS, all packets on Q-0
-		} else {
-			const_cast<PbsPacketFilter*>(this)->MakePrioLimits();
-			if (m_nonBlind) {
-				uint32_t bytes_remaining = std::max((uint64_t)1, ref.flowSize - ref.txBytes);
-				raw_prio = ref.flowAge.GetNanoSeconds () / pow (bytes_remaining, m_alpha);
-			} else {
-				raw_prio = ref.flowAge.GetNanoSeconds () / pow (ref.txBytes, m_alpha);
-			}
-			ref.rawPrioHistory.push_back(std::make_tuple(raw_prio, ref.txBytes, ref.flowAge.GetNanoSeconds()));
-			//if ((!ref.firstTx && ref.flowAge != Seconds(0)) || m_nonBlind) {
-			if (!firstFlag || m_nonBlind) {
-				for (bin_prio = 7; bin_prio >= 0; bin_prio--)
-				{
-					if (raw_prio <= m_prioLimits[bin_prio])
-						break;
-				}
-			} else {
-				bin_prio = 0;
-			}
-		}
-		bin_prio = std::max(bin_prio, uint8_t(0));
-		ref.prioHistory[bin_prio] += packetsize;
-		ref.prioPacketHistory[bin_prio]++;
-
 		PrioTag prioTag;
+
+		// N.B. To add non-TCP based congestion controls, this logic needs to be rid of TCP-specific dependencies
+
+		// check if handshaking packet via SYN
+		Ptr<Packet> pkt = item->GetPacket ();
+		TcpHeader tcpHdr;
+		if ( pkt->PeekHeader (tcpHdr) ) {
+			if ( tcpHdr.GetFlags() & TcpHeader::SYN ) {
+				bin_prio = 0;
+			} else {
+
+				const_cast<PbsPacketFilter*>(this)->m_totalBytes += packetsize;
+				const_cast<PbsPacketFilter*>(this)->GetLoadStats () += packetsize;
+
+				FlowStats &ref = const_cast<PbsPacketFilter*>(this)->GetStatsForFlow(flowId);
+				bool firstFlag = false;
+				if (ref.firstTx == true)
+				{
+					ref.timeFirstTxPacket = Simulator::Now();
+					ref.firstTx = false;
+					firstFlag = true;
+					if (m_nonBlind) {
+						FlowSizeTag flowSizeTag;
+						if (pkt->RemovePacketTag (flowSizeTag)) {
+							ref.flowSize = flowSizeTag.GetFlowSize ();
+						}
+					}
+				}
+				ref.txBytes += packetsize;
+				ref.txPackets++;
+				ref.timeLastTxPacket = Simulator::Now();
+				ref.flowAge = ref.timeLastTxPacket - ref.timeFirstTxPacket;
+
+				if (!m_usePbs) {
+					bin_prio = 0; // No PBS, all packets on Q-0
+				} else {
+					const_cast<PbsPacketFilter*>(this)->MakePrioLimits();
+					if (m_nonBlind) {
+						uint32_t bytes_remaining = std::max((uint64_t)1, ref.flowSize - ref.txBytes);
+						raw_prio = ref.flowAge.GetNanoSeconds () / pow (bytes_remaining, m_alpha);
+					} else {
+						raw_prio = ref.flowAge.GetNanoSeconds () / pow (ref.txBytes, m_alpha);
+					}
+					ref.rawPrioHistory.push_back(std::make_tuple(raw_prio, ref.txBytes, ref.flowAge.GetNanoSeconds()));
+					if (!firstFlag || m_nonBlind) {
+						for (bin_prio = 7; bin_prio >= 0; bin_prio--)
+						{
+							if (raw_prio <= m_prioLimits[bin_prio])
+								break;
+						}
+					} else {
+						bin_prio = 0;
+					}
+				}
+				bin_prio = std::max(bin_prio, uint8_t(0));
+				ref.prioHistory[bin_prio] += packetsize;
+				ref.prioPacketHistory[bin_prio]++;
+
+			} // end if SYN flag set
+		} else { // was not a TCP Header
+			bin_prio = 0;
+		}
+
 		prioTag.SetPrioValue (bin_prio);
-		Ptr<Packet> pkt = item->GetPacket();
 		pkt->AddPacketTag (prioTag);
 
 		return bin_prio;
