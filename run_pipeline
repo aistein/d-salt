@@ -8,7 +8,7 @@ ns3='./ns3.29-workspace-dev'
 processors=10
 
 # number of flows to send
-flows=100000
+flows=300000
 
 # queue buffer size
 buff=42400
@@ -17,10 +17,10 @@ buff=42400
 thresh=10
 
 # PBS Alpha Values
-alphas=(0 10 100 1000)
+alphas=(10)
 
 # Workload Profiles
-profiles=(1)
+profiles=(1 2 3)
 
 # Desired Network Load
 load=0.8
@@ -40,7 +40,7 @@ nonblind=true
 samethresh=false
 
 # Description of this Experiment
-description="80% Load, W1, 1:1 Subscription, Nonblind"
+description="80% Load, W1-3, Alpha=10, 1:1 Subscription, Nonblind"
 
 # Pipeline Script Control Switches
 run_simulations=true # if false, expects pre-populated tmp dir

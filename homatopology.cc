@@ -354,13 +354,6 @@ int main(int argc, char *argv[])
 			if (!oversub) {
 				networkLoadTracer.Add( link.Get(0) );
 			}
-			if (nonblind) {
-				Ptr<PbsPacketFilter> pf = DynamicCast<PbsPacketFilter>(
-						qdiscHost[j].Get(h)->GetPacketFilter (0)
-						);
-				//auto pf = qdiscHost[j].Get(h)->GetPacketFilter (0);
-				pf->SetNodePointer(Ptr<Node>(host[j].Get(i)));
-			}
 		}
 	}
 
