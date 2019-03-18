@@ -289,10 +289,19 @@ namespace ns3 {
 
 		FlowStats &ref = const_cast<PbsPacketFilter*>(this)->GetStatsForFlow(flowId);
 
+		bool firstFlag = false;
 		if (ref.firstTx == true)
 		{
 			ref.timeFirstTxPacket = Simulator::Now();
 			ref.firstTx = false;
+			firstFlag = true;
+			if (m_nonBlind) {
+				FlowSizeTag flowSizeTag;
+				Ptr<Packet> pkt = item->GetPacket ();
+				if (pkt->RemovePacketTag (flowSizeTag)) {
+					ref.flowSize = flowSizeTag.GetFlowSize ();
+				}
+			}
 		}
 		ref.txBytes += packetsize;
 		ref.txPackets++;
@@ -304,20 +313,14 @@ namespace ns3 {
 		} else {
 			const_cast<PbsPacketFilter*>(this)->MakePrioLimits();
 			if (m_nonBlind) {
-				if (ref.flowSize == 20000000) {
-					FlowSizeTag flowSizeTag;
-					Ptr<Packet> pkt = item->GetPacket ();
-					if (pkt->RemovePacketTag (flowSizeTag)) {
-						ref.flowSize = flowSizeTag.GetFlowSize ();
-					}
-				}
 				uint32_t bytes_remaining = std::max((uint64_t)1, ref.flowSize - ref.txBytes);
 				raw_prio = ref.flowAge.GetNanoSeconds () / pow (bytes_remaining, m_alpha);
 			} else {
 				raw_prio = ref.flowAge.GetNanoSeconds () / pow (ref.txBytes, m_alpha);
 			}
 			ref.rawPrioHistory.push_back(std::make_tuple(raw_prio, ref.txBytes, ref.flowAge.GetNanoSeconds()));
-			if (!ref.firstTx && ref.flowAge != Seconds(0)) {
+			//if ((!ref.firstTx && ref.flowAge != Seconds(0)) || m_nonBlind) {
+			if (!firstFlag || m_nonBlind) {
 				for (bin_prio = 7; bin_prio >= 0; bin_prio--)
 				{
 					if (raw_prio <= m_prioLimits[bin_prio])
