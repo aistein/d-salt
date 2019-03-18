@@ -1,6 +1,6 @@
 # D-SALT
 ### Datacenter Sender Adaptive Low-Latency Transport
-#### Dr. Vishal Misra (misra@cs.columbia.edu), Dr. Dan Rubenstein (danr@cs.columbia.edu), Kunal Mahajan (kvm2116@columbia.edu), Pearce Kieser (pck2119@columbia.edu), Alexander Stein (as5281@columbia.edu)
+#### Dr. Vishal Misra (misra@cs.columbia.edu), Dr. Dan Rubenstein (danr@cs.columbia.edu), Kunal Mahajan (kvm2116@columbia.edu), Pearce Kieser (pck2119@columbia.edu), Yudong Yang (yy2485@columbia.edu), Alexander Stein (as5281@columbia.edu)
 ##### Columbia University
 
 

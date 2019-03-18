@@ -12,6 +12,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from scipy.stats import norm
+matplotlib.rcParams['font.size'] = 16
+matplotlib.rcParams['xtick.labelsize'] = 14
+matplotlib.rcParams['ytick.labelsize'] = 14
+
 try:
     from xml.etree import cElementTree as ElementTree
 except ImportError:
@@ -275,7 +279,7 @@ def main(argv):
         print " done."
 
     colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
-    markers = ["x", "o", "v", "s"]
+    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
 
     # replace 'a's with greek 'alpha's
     for i, sim_name in enumerate(sim_names):
@@ -284,6 +288,7 @@ def main(argv):
 
     # FCT CDF
     fig, ax = plt.subplots()
+    plt.yticks(rotation=45)
     offset = 0.0
     for i, sim in enumerate(sim_list):
         flows_of_interest = []
@@ -313,20 +318,21 @@ def main(argv):
         #y = norm.cdf(x, mu, sigma)
 
         offset += 0.02
-        cdf,bins,_ = plt.hist(fcts, bins=x, density=True, alpha=0.5, color=colors[i], linestyle='-', histtype='step', cumulative=True, label=None)
-        plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i], marker=markers[i], markevery=0.1+offset)
+        cdf,bins,_ = plt.hist(fcts, bins=x, density=True, alpha=0.5, color=colors[i%10], linestyle='-', histtype='step', cumulative=True, label=None)
+        plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i%10], marker=markers[i%11], markevery=0.1+offset, markersize=10, linewidth='2')
         #plt.plot(x, y, color=colors[i], linestyle='--', alpha=0.5, label=sim_names[i]+'_norm')
 
-    plt.title(argv[1].split("/")[2].split(".")[0].split("_")[0] + " - Flow Completion Time CDF")
-    plt.ylabel("Proportion of Flows")
-    plt.xlabel("Flow Completion Time (s)")
+    #plt.rcParams.update({'font.size': 16})
+    #plt.title(argv[1].split("/")[2].split(".")[0].split("_")[0] + " - Flow Completion Time CDF")
+    plt.ylabel("Proportion of Flows", fontsize=16)
+    plt.xlabel("Flow Completion Time (s)", fontsize=16)
     plt.xscale('log')
     plt.ylim(0.0,1.0)
     plt.legend()
     fix_hist_step_vertical_line_at_end(ax)
     outfilename = argv[1].split("/")[2].split(".")[0].split("_")[0] + "_fct_cdf.png"
     plt.tight_layout()
-    plt.savefig(outfilename)
+    plt.savefig(outfilename, dpi=600)
     plt.clf()
 
 if __name__ == '__main__':

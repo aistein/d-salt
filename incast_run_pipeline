@@ -1,0 +1,266 @@
+#!/bin/bash
+
+#---------- begin user configurations -------------------------
+# ns3 build area
+ns3='./ns3.29-workspace-dev'
+
+# number of processors on this machine
+processors=8
+
+# number of flows per incast degree
+flows=100
+
+# number of incast senders
+senders=128
+
+# size of each incast flow
+flowsize=450000
+
+# queue buffer size
+buff=42400
+
+# DCTCP threshold
+thresh=10
+
+# PBS Alpha Values
+alphas=(10)
+
+# same threshold
+samethresh=true
+
+# description of this experiment
+description="Incast Scenario for 128-nodes, Same Threshold, 450kB flows, Alpha=10, 100-per-degree"
+
+# Plot Generation Switches
+run_simulations=true # if false, expects pre-populated tmp dir
+upload=true # if true, upload results to GCS
+clean=false # if true, remove all temporary files
+#----------- end user configurations --------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# script deploy location
+repo=$(pwd -P)
+
+# script start-time
+start=`date +%s`
+
+# function to wait for a bunch of jobs to finish
+synchronization_barrier () {
+	arr=("$@")
+	for pid in "${arr[@]}"; do
+		wait "$pid"
+	done
+}
+
+# date as UID for gcloud buckets
+date=`date +"%m_%d_%Y-%H-%M"`
+
+# make necessary directories
+if [ ! -d "results/incast" ]; then
+	mkdir -p results/incast/plots
+	mkdir -p results/incast/data
+	mkdir -p $ns3/results/incast
+	mkdir -p tmp/incast
+	mkdir -p logs/incast
+fi
+
+# clean out all old files from previous/local runs
+if [ "$clean" = true ]; then
+	sudo rm -f *timebounds.txt
+	sudo rm -f *mv_avg_bounds.txt
+	sudo rm -f *.png
+	sudo rm -f *.config
+	sudo rm -f *config.txt
+	sudo rm -f *.log
+	sudo rm -f tmp/incast/*
+	sudo rm -f logs/incast/*
+	sudo rm -f results/incast/plots/*
+	sudo rm -f results/incast/data/*
+	sudo rm -f $ns3/results/incast/*
+fi
+
+# redirect stdout and stderr to logfile
+logfile="./incast_run_pipeline-${date}.log"
+echo "-I- incast_run_pipeline: running..."
+echo "-I- incast_run_pipeline: to check status, run \"tail -f ${logfile}\""
+exec > "$logfile" 2>&1
+
+# print run configurations to config file for reference
+configfile="./incast_run_pipeline-${date}-config.txt"
+echo "description:      $description"			>> "$configfile"
+echo "incast-senders:   $senders"			>> "$configfile"
+echo "flows per degree: $flows"				>> "$configfile"
+echo "buff:         	$buff" 				>> "$configfile"
+echo "thresh:       	$thresh" 			>> "$configfile"
+echo "samethresh:      	$samethresh" 			>> "$configfile"
+echo "alphas:       	(${alphas[*]})" 		>> "$configfile"
+echo "profile:     	incast"		 		>> "$configfile"
+
+# initialize pid arrays for new jobs, and zero proccount
+sim_pids=()
+plot_pids=()
+proccount=0
+
+# if "run_simulations" is disabled, "tmp/..." directories are expected to be pre-populated
+if [ "$run_simulations" = true ]; then
+
+	# enter ns3 directory to run simulations
+	pushd $ns3
+	
+	# rebuild once before parallel deployments - avoids "compilation collision" between threads
+	sudo ./waf build
+	
+	# Simulations With PBS
+	for A in "${alphas[@]}";
+	do
+		for S in $(seq 1 "$senders");
+		do
+			proccount=$(($proccount+1))
+			if [ $proccount == $processors ]; then
+				synchronization_barrier "${sim_pids[@]}"
+				sim_pids=()
+				proccount=1
+			fi
+			args="scratch/incasttopo"
+			args+=" --apps=$flows"
+			args+=" --buff=$buff"
+			args+=" --alpha=$A"
+			args+=" --thresh=$thresh"
+			#args+=" --thresh=80" // experimental
+			args+=" --profile=6"
+			args+=" --tag=a${A}_s${S}"
+			args+=" --incast_servers=$S"
+			args+=" --incastFlowSize=$flowsize"
+			echo "Running Sim with args: $args"
+			sudo ./waf --run "$args" &> $repo/logs/incast/sim_a"$A"_s"$S".log & sim_pids+=("$!")
+		done
+	done
+	
+	# Simulations Without PBS
+	if [ "$samethresh" = false ]; then
+		thresh="$(($thresh*8))" # 8x DCTCP threshold for no-priority simulations
+	fi
+	for S in $(seq 1 "$senders");
+	do
+		proccount=$(($proccount+1))
+		if [ $proccount == $processors ]; then
+			synchronization_barrier "${sim_pids[@]}"
+			sim_pids=()
+			proccount=1
+		fi
+		args="scratch/incasttopo"
+		args+=" --apps=$flows"
+		args+=" --buff=$buff"
+		args+=" --usePbs=false"
+		args+=" --thresh=$thresh"
+		args+=" --profile=6"
+		args+=" --tag=dctcp_s${S}"
+		args+=" --incast_servers=$S"
+		args+=" --incastFlowSize=$flowsize"
+		echo "Running Sim with args: $args"
+		sudo ./waf --run "$args" &> $repo/logs/incast/sim_dctcp_s"$S".log & sim_pids+=("$!")
+	done
+	
+	
+	# wait for simulations to complete
+	echo "-I- incast_run_pipeline: simulations deployed..." > /dev/tty
+	echo "-I- incast_run_pipeline: simulations deployed..."
+	synchronization_barrier "${sim_pids[@]}"
+	sim_finish=`date +%s`
+	sim_runtime=$((sim_finish-start))
+	echo "-I- incast_run_pipeline: simulations completed in $sim_runtime (s)." > /dev/tty
+	echo "-I- incast_run_pipeline: simulations completed in $sim_runtime (s)."
+	
+	# move back into original directory to run graph-gen scripts
+	popd
+	
+fi # if run_simulations
+
+if [ "$run_simulations" = true ]; then
+	# move ns3 simulation outputs into local tmp directory
+	sudo mv $ns3/results/incast/* tmp/incast
+fi
+
+echo "-I- incast_run_pipeline: generating plots..." > /dev/tty
+echo "-I- incast_run_pipeline: generating plots..."
+
+# calculate priority distirbution histograms
+for filepath in tmp/incast/*.prio; do
+	proccount=$(($proccount+1))
+	if [ $proccount == $processors ]; then
+		synchronization_barrier "${plot_pids[@]}"
+		plot_pids=()
+		proccount=1
+	fi
+	filename="$(basename -- $filepath)"
+	sudo ./scripts/histogram.py "$filepath" &> ./logs/incast/${filename}.log & plot_pids+=("$!")
+done
+
+# generate boxplots for dctcp and pbs
+sudo ./scripts/incast_whiskers.py tmp/incast/ &> ./logs/incast/incast_whiskers.log & plot_pids+=("$!")
+sudo ./scripts/incast_flowsizes.py tmp/incast/ &> ./logs/incast/incast_flowsizes.log & plot_pids+=("$!")
+sudo ./scripts/incast-fct-99.py tmp/incast/ &> ./logs/incast/incast_fct_99.log & plot_pids+=("$!")
+
+# wait for all plotting scripts to complete
+synchronization_barrier "${plot_pids[@]}"
+plot_finish=`date +%s`
+plot_runtime=$((plot_finish-sim_finish))
+echo "-I- incast_run_pipeline: remaining plots finished in $plot_runtime (s)." > /dev/tty
+echo "-I- incast_run_pipeline: remaining plots finished in $plot_runtime (s)."
+
+# move graphs into results folder
+sudo mv incast*.png results/incast/plots
+sudo mv *fairness.png results/incast/plots
+sudo mv *incast_sizes.png results/incast/plots
+
+if [ "$upload" = true ]; then
+
+	# copy results to gcloud storage
+	echo "-I- incast_run_pipeline: transferring results to gcloud storage..." > /dev/tty
+	echo "-I- incast_run_pipeline: transferring results to gcloud storage..."
+	sudo rm -f /etc/boto.cfg
+	sudo gsutil -m cp "$configfile" gs://homa-pbs/Incast_Simulations_$date/
+	sudo gsutil -m cp "$logfile" gs://homa-pbs/Incast_Simulations_$date/
+	sudo gsutil -m cp -r results/incast/* gs://homa-pbs/Incast_Simulations_$date/
+	sudo gsutil -m cp -r logs/incast/* gs://homa-pbs/Incast_Simulations_$date/logs/
+	sudo gsutil -m cp -r tmp/incast/*.xml gs://homa-pbs/Incast_Simulations_$date/data/
+	sudo gsutil -m cp -r tmp/incast/*.load.tr gs://homa-pbs/Incast_Simulations_$date/data/
+
+fi # if upload
+
+if [ "$clean" = true ]; then
+
+	# clean out temporary files and results, but leave the logs
+	echo "-I- incast_run_pipeline: removing local temporary files..." > /dev/tty
+	echo "-I- incast_run_pipeline: removing local temporary files..."
+	sudo rm -f tmp/incast/*
+	sudo rm -f results/incast/plots/*
+	sudo rm -f results/incast/data/*
+	sudo rm -f $ns3/results/incast/*
+
+fi # if clean
+
+# print run stats
+finish=`date +%s`
+runtime=$((finish-start))
+echo "-I- incast_run_pipeline: finished in $runtime (s)." > /dev/tty
+echo "-I- incast_run_pipeline: finished in $runtime (s)."
+echo "-I- incast_run_pipeline: output logged to: ${logfile}" > /dev/tty
+echo "-I- incast_run_pipeline: output logged to: ${logfile}"
+
+# bring output back to the terminal, exit
+exec &>/dev/tty 
+exit

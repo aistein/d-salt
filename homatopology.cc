@@ -48,6 +48,7 @@
 #include "ns3/packet.h"
 #include "ns3/packet-filter.h"
 #include "ns3/pbs.h"
+#include "ns3/traffic-control-module.h"
 #include "ns3/traffic-control-helper.h"
 #include "ns3/prioTag.h"
 #include "ns3/pbs-switch.h"
@@ -139,6 +140,8 @@ int main(int argc, char *argv[])
 	bool fast = false;
 	bool use_pbs = true;
 	bool use_dctcp = true;
+	bool oversub = false;
+	bool nonblind = false;
 	uint32_t buffer_size = 42400;
 	uint32_t threshold = 10;
 	double load_multiplier = 6.0; // increase the load by a constant factor to account for TCP slow-start inefficiency!
@@ -157,11 +160,14 @@ int main(int argc, char *argv[])
 	cmd.AddValue("useDctcp", "switch to toggle DCTCP mode (bool)", use_dctcp);
 	cmd.AddValue("load", "load factor (double)", load);
 	cmd.AddValue("loadMultiplier", "load factor multiplier to increase number of flows (double)", load_multiplier);
+	cmd.AddValue("oversub", "oversubscribed topo 2:1 (bool)", oversub);
+	cmd.AddValue("nonblind", "non-blind version of PBS (bool)", nonblind);
 	cmd.Parse (argc, argv);
 
 	string cdf_filename = "";
 	string output_directory = "";
 	uint32_t sim_duration = 6000;
+	cout << "Profile = " << profile << "\n";
 	switch (profile)
 	{
 		case 1: // W1
@@ -303,7 +309,8 @@ int main(int argc, char *argv[])
 	tchHost.AddPacketFilter(handle, "ns3::PbsPacketFilter",
 				"Alpha", DoubleValue (alpha),
 				"Profile", UintegerValue (profile),
-		       		"UsePbs", BooleanValue (use_pbs)
+		       		"UsePbs", BooleanValue (use_pbs),
+				"NonBlind", BooleanValue (nonblind)
 	);
 	TrafficControlHelper::ClassIdList cls = tchHost.AddQueueDiscClasses (handle, 8, "ns3::QueueDiscClass"); 
 	tchHost.AddChildQueueDiscs (handle, cls, "ns3::RedQueueDisc"); // Must use RED to support ECN
@@ -344,8 +351,16 @@ int main(int argc, char *argv[])
 			Ipv4InterfaceContainer tempContainer = address.Assign( link );
 			ipContainer[j].Add (tempContainer.Get(1) );
 
-			networkLoadTracer.Add( link.Get(0) );
-			//networkLoadTracer.Add( link.Get(1) );
+			if (!oversub) {
+				networkLoadTracer.Add( link.Get(0) );
+			}
+			if (nonblind) {
+				Ptr<PbsPacketFilter> pf = DynamicCast<PbsPacketFilter>(
+						qdiscHost[j].Get(h)->GetPacketFilter (0)
+						);
+				//auto pf = qdiscHost[j].Get(h)->GetPacketFilter (0);
+				pf->SetNodePointer(Ptr<Node>(host[j].Get(i)));
+			}
 		}
 	}
 
@@ -358,8 +373,11 @@ int main(int argc, char *argv[])
 // Initialize PointtoPoint helper
 //	
 	PointToPointHelper p2p_edgeToAgg;
-  	//p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("40"+rateUnits));
-  	p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("20"+rateUnits)); // Oversubscription 2:1
+	if (oversub) { // 2:1 oversubscription
+  		p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("20"+rateUnits));
+	} else {
+  		p2p_edgeToAgg.SetDeviceAttribute ("DataRate", StringValue ("40"+rateUnits));
+	}
   	p2p_edgeToAgg.SetChannelAttribute ("Delay", StringValue ("100ns"));
 			     
 // Installations...
@@ -371,8 +389,9 @@ int main(int argc, char *argv[])
 			qdiscEdgeUp[j][h] = tchSwitch.Install(ae[j][h].Get(1));
 			qdiscAgg[j][h] = tchSwitch.Install(ae[j][h].Get(0));
 
-			//networkLoadTracer.Add( ae[j][h].Get(0) );
-			//networkLoadTracer.Add( ae[j][h].Get(1) );
+			if (oversub) {
+				networkLoadTracer.Add( ae[j][h].Get(0) );
+			}
 
 			int second_octet = 0;
 			int third_octet = j+num_host;
@@ -450,29 +469,18 @@ int main(int argc, char *argv[])
 	{
 		case 1:
 			meanFlowSize = 407.1;
-			//load_multiplier = 7.0; 
 			break;
 		case 2:
 			meanFlowSize = 654.4;
-			//load_multiplier = 7.5;
-			//load_multiplier = 9.5;
-			//load_multiplier = 11.5;
 			break;
 		case 3:
 			meanFlowSize = 3259.3;
-			//load_multiplier = 12;
-			//load_multiplier = 13;
-			//load_multiplier = 15;
 			break;
 		case 4:
 			meanFlowSize = 136469.3;
-			//load_multiplier = 38;
-			//load_multiplier = 40;
-			//load_multiplier = 42;
 			break;
 		case 5:
 			meanFlowSize = 1819002.1;
-			//load_multiplier = 120;
 			break;
 	}
 	//double lam = (link_rate*load)/(meanFlowSize*8.0/1460*1500);
@@ -537,6 +545,7 @@ int main(int argc, char *argv[])
 			sink = sh.Install(host[i].Get(j));
 		}
 	}
+
 /*
 	// FOR ONE FLOW
 	ApplicationContainer app;

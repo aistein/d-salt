@@ -13,13 +13,19 @@ import matplotlib.pylab as plt
 
 try:
     filename = sys.argv[1]
-    load_factor = float(sys.argv[2])
+    desired_load = float(sys.argv[2])
+    oversub = bool(sys.argv[3])
+    if desired_load > 1.0:
+        print "required: desired_load <= 1.0"
+        exit(1)
 except IndexError:
-    print "usage: ./calculate-network-load.py <trace file>.tr load_factor"
+    print "usage: ./calculate-network-load.py <trace file>.tr <desired_load>"
     exit(1)
 
 SIM_TIMESTEP = 1e-6 # each bucket represents 1 microseconds of simulation time
 INTERVAL_MAX_RATE = 1440e9 * SIM_TIMESTEP
+if oversub:
+     INTERVAL_MAX_RATE /= 2 # assumes 2:1 oversubscription
 
 # Functions for Edge Detection
 # credit: http://sam-koblenski.blogspot.com/2015/09/everyday-dsp-for-programmers-edge.html
@@ -27,39 +33,27 @@ INTERVAL_MAX_RATE = 1440e9 * SIM_TIMESTEP
 def ExpAvg(sample, avg, w):
     return w*sample + (1-w)*avg
 
-# EdgeDetect...
-# - samples : list of values corresponding to a time series "signal"
-# - delta_threshold : detect edges when averages differ by >= this
-# - global_threshold : detect edges when g_t - tol <= X <= g_t + tol
-def EdgeDetect(samples, delta_threshold, global_threshold, tolerance):
-    fastAvg = samples[0]
-    slowAvg = samples[0]
-    prevDifference = 0
-    prevInRange = False
-    edges = []
+def EdgeDetect(samples, global_threshold, tolerance):
+    """Determine the time-bounds when load is in the desired range.
+
+    Keyword arguments:
+    samples -- sorted load values representing the signal on which we wish to detect edges
+    global_threshold -- the exact desired network load
+    tolerance -- amount below desired load it is okay to start detecting edges
+    """
+    avg = samples[0]
+    firstEdge = lastEdge = -1L
 
     for timestamp, sample in sorted(samples.items()):
-        fastAvg = ExpAvg(sample, fastAvg, 0.25)
-        print "f: ", fastAvg
-        slowAvg = ExpAvg(sample, slowAvg, 0.0625)
-        print "s: ", slowAvg
-        difference = abs(fastAvg - slowAvg)
-        print "f-s: ", difference
+        EXP_AVG_SPEED = 0.50
+        avg = ExpAvg(sample, avg, EXP_AVG_SPEED)
+        if avg + tolerance >= global_threshold:
+            if firstEdge == -1L:
+                firstEdge = timestamp
+            else:
+                lastEdge = timestamp
 
-        isEdge = prevDifference < delta_threshold and difference >= delta_threshold
-        enterRange = fastAvg + tolerance >= global_threshold 
-        exitRange = fastAvg + tolerance < global_threshold 
-
-        if isEdge and (enterRange or (exitRange and prevInRange)):
-            edges.append(timestamp)
-        prevDifference = difference
-
-        if enterRange and not prevInRange:
-            prevInRange = True
-        if exitRange and prevInRange:
-            prevInRange = False
-
-    return edges
+    return firstEdge, lastEdge
 
 # gather total bits sent during each nanosecond
 egress_bits_in_interval = defaultdict(long)
@@ -90,8 +84,6 @@ with open(filename, 'r') as f:
 load_sum = 0.0
 exceeded_cnt = 0
 load_in_interval = defaultdict(float)
-moving_window = 20
-moving_sum = 0.0
 start_time_bound = -1
 end_time_bound = -1
 for interval, bits in sorted(egress_bits_in_interval.iteritems()):
@@ -104,35 +96,9 @@ for interval, bits in sorted(egress_bits_in_interval.iteritems()):
         load_in_interval[interval] = egress_bits_in_interval[interval] * 1.0 / INTERVAL_MAX_RATE
     load_sum += load_in_interval[interval]
 
-    # calculate moving average to find start time and end time bounds
-    if interval < moving_window-1:
-	moving_sum += load_in_interval[interval]
-    else:
-	if end_time_bound < 0:
-	        moving_sum += load_in_interval[interval]
-		moving_sum -= load_in_interval[interval-moving_window]
-		if moving_sum/moving_window > load_factor-0.05 and start_time_bound < 0:
-			start_time_bound = interval
-		if start_time_bound > 0 and moving_sum/moving_window < load_factor-0.05:
-			end_time_bound = interval
-if end_time_bound < 0:
-    end_time_bound = max(load_in_interval.items())
-
-# save the (moving-average) time bounds to file
-file_path = filename.split("/")[2].split(".")[0] + "_mv_avg_bounds.txt"
-with open(file_path, 'w') as file:
-	file.write(str(start_time_bound))
-	file.write("\n")
-	file.write(str(end_time_bound))
-
-# edge detection method (compare to moving-average)
-#delta_load_threshold = 0.025 # higher --> less edges; lower --> more edges
-delta_load_threshold = 0.015 # higher --> less edges; lower --> more edges
-tolerance = 0.2
-edges = EdgeDetect(load_in_interval, delta_load_threshold, load_factor, tolerance)
-print "All Edges: ", edges
-start_time_bound = long(np.percentile(edges, 15))
-end_time_bound = long(np.percentile(edges, 99))
+# edge detection to determine time interval of desired load
+tolerance = 0.1
+start_time_bound, end_time_bound = EdgeDetect(load_in_interval, desired_load, tolerance)
 
 # save the (edge-detection) time bounds to file
 file_path = filename.split("/")[2].split(".")[0] + "_timebounds.txt"

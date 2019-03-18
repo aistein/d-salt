@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <map>
 #include <utility>
 #include "ns3/nstime.h"
 #include "ns3/queue-disc.h"
@@ -23,6 +24,7 @@ namespace ns3 {
 			void StreamToCsv (std::ofstream& csv);
 			void StreamPacketsToCsv (std::ofstream& csv);
 			void StreamRawPrioToCsv (std::ofstream& csv);
+			void SetNodePointer (Ptr<Node> nodeptr);
 			uint64_t GetTotalBytes (void);
 			std::map<uint64_t, uint64_t> PeekLoadAtTime (void);
 
@@ -31,7 +33,9 @@ namespace ns3 {
 			virtual int32_t DoClassify (Ptr<QueueDiscItem> item) const;
 			double m_alpha;
 			bool m_usePbs;
+			bool m_nonBlind;
 			uint32_t m_profile;
+			Ptr<Node> m_nodeptr;
 
 			uint64_t m_totalBytes;
 			double m_prioLimits[8];
@@ -44,6 +48,7 @@ namespace ns3 {
 				Time     timeLastTxPacket;
 				Time     flowAge;
 				uint64_t txBytes;
+				uint64_t flowSize;
 			        uint32_t txPackets;
 				bool	 firstTx;
 				std::map<uint16_t, uint64_t> prioHistory; // raw bytes per priority level
