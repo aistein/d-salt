@@ -28,6 +28,8 @@ def parse_time_ns(tm):
 
 BOTTLENECK_RATE = 10e9 # 10Gbps
 PERCENTILE_CUTOFF = 99
+INCAST_FLOW_SIZE = 450e3
+INCAST_SENDERS = 128
 N_BINS = 8 
 
 ## FiveTuple
@@ -288,10 +290,11 @@ def main(argv):
                     sys.stdout.flush()
         print " done."
 
-    # FCT BoxPlot
+    # FCT 99p Plot
     fig, ax = plt.subplots()
 
     dctcp_data = []
+    dctcp_flows_completed = []
     for i, sim in sorted(dctcp_sim_dict.items()):
         flows_of_interest = []
         flowsizes = []
@@ -303,12 +306,15 @@ def main(argv):
 
         # Get FCTs for this incast scenario
         fcts = []
+        dctcp_flows_completed.append(0)
         for flow in flows_of_interest:
             if flow.rawDuration > 0:
                 fcts.append(float(flow.rawDuration))
-        dctcp_data.append( np.percentile(fcts, 99) )
+                dctcp_flows_completed[-1] += 1 if flow.size >= INCAST_FLOW_SIZE else 0
+        dctcp_data.append( np.percentile(sorted(fcts), 99) )
 
     pbs_data = []
+    pbs_flows_completed = []
     for i, sim in sorted(pbs_sim_dict.items()):
         #print "processing pbs data for {} servers".format(i)
         flows_of_interest = []
@@ -321,13 +327,19 @@ def main(argv):
 
         # Get FCTs for this incast scenario
         fcts = []
+        pbs_flows_completed.append(0)
         for flow in flows_of_interest:
             if flow.rawDuration > 0:
                 fcts.append(float(flow.rawDuration))
-        pbs_data.append( np.percentile(fcts, 99) )
+                pbs_flows_completed[-1] += 1 if flow.size >= INCAST_FLOW_SIZE else 0
+        pbs_data.append( np.percentile(sorted(fcts), 99) )
 
-    print "pbs_data size: ", len(pbs_data)
-    print "dctcp_data size: ", len(dctcp_data)
+    print "pbs_data size: {}, pbs flows completed in last run = {}, 99p-fct of last run = {}".format(
+            len(pbs_data), pbs_flows_completed[-1], pbs_data[-1])
+    #print pbs_flows_completed
+    print "dctcp_data size: {}, dctcp flows completed in last run = {}, 99-fct of last run = {}".format(
+            len(dctcp_data), dctcp_flows_completed[-1], dctcp_data[-1])
+    #print dctcp_flows_completed
     plt.plot( [i for i in range(len(pbs_data))], pbs_data, linestyle='-', marker="o", markevery=0.1,
             label="D-SALT")
     plt.plot( [i for i in range(len(dctcp_data))], dctcp_data, linestyle='-', marker="x", markevery=0.1,

@@ -5,7 +5,10 @@
 ns3='./ns3.29-workspace-dev'
 
 # number of processors on this machine
-processors=5
+processors=8
+
+# number of flows per incast degree
+flows=100
 
 # number of incast senders
 senders=128
@@ -23,15 +26,15 @@ thresh=10
 alphas=(10)
 
 # same threshold
-samethresh=false
+samethresh=true
 
 # description of this experiment
-description="Incast Scenario for 128-nodes, 450kB flows, Alpha=10"
+description="Incast Scenario for 128-nodes, Same Threshold, 450kB flows, Alpha=10, 100-per-degree"
 
 # Plot Generation Switches
 run_simulations=true # if false, expects pre-populated tmp dir
 upload=true # if true, upload results to GCS
-clean=true # if true, remove all temporary files
+clean=false # if true, remove all temporary files
 #----------- end user configurations --------------------------
 
 
@@ -79,6 +82,8 @@ if [ "$clean" = true ]; then
 	sudo rm -f *timebounds.txt
 	sudo rm -f *mv_avg_bounds.txt
 	sudo rm -f *.png
+	sudo rm -f *.config
+	sudo rm -f *config.txt
 	sudo rm -f *.log
 	sudo rm -f tmp/incast/*
 	sudo rm -f logs/incast/*
@@ -94,9 +99,10 @@ echo "-I- incast_run_pipeline: to check status, run \"tail -f ${logfile}\""
 exec > "$logfile" 2>&1
 
 # print run configurations to config file for reference
-configfile="./incast_run_pipeline-${date}.config"
+configfile="./incast_run_pipeline-${date}-config.txt"
 echo "description:      $description"			>> "$configfile"
 echo "incast-senders:   $senders"			>> "$configfile"
+echo "flows per degree: $flows"				>> "$configfile"
 echo "buff:         	$buff" 				>> "$configfile"
 echo "thresh:       	$thresh" 			>> "$configfile"
 echo "samethresh:      	$samethresh" 			>> "$configfile"
@@ -129,10 +135,11 @@ if [ "$run_simulations" = true ]; then
 				proccount=1
 			fi
 			args="scratch/incasttopo"
-			args+=" --apps=1"
+			args+=" --apps=$flows"
 			args+=" --buff=$buff"
 			args+=" --alpha=$A"
 			args+=" --thresh=$thresh"
+			#args+=" --thresh=80" // experimental
 			args+=" --profile=6"
 			args+=" --tag=a${A}_s${S}"
 			args+=" --incast_servers=$S"
@@ -155,7 +162,7 @@ if [ "$run_simulations" = true ]; then
 			proccount=1
 		fi
 		args="scratch/incasttopo"
-		args+=" --apps=1"
+		args+=" --apps=$flows"
 		args+=" --buff=$buff"
 		args+=" --usePbs=false"
 		args+=" --thresh=$thresh"
@@ -214,7 +221,7 @@ plot_runtime=$((plot_finish-sim_finish))
 echo "-I- incast_run_pipeline: remaining plots finished in $plot_runtime (s)." > /dev/tty
 echo "-I- incast_run_pipeline: remaining plots finished in $plot_runtime (s)."
 
-# move logs and graphs into results folder
+# move graphs into results folder
 sudo mv incast*.png results/incast/plots
 sudo mv *fairness.png results/incast/plots
 sudo mv *incast_sizes.png results/incast/plots

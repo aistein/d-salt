@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
 	// settings for incast workload
 	string output_directory = "./results/incast/";
 	tag = "incast_" + tag;
-	uint32_t sim_duration = 2500; // 2500 seconds
+	uint32_t sim_duration = 5 * num_flows + 1; // seconds
 
 //=========== Define parameters based on value of k ===========//
 //
@@ -353,7 +353,7 @@ int main(int argc, char *argv[])
 //
 	// N FLOWS (TOTAL) - N SOURCES ->  1 FIXED DESTINATION
 	//
-	ApplicationContainer app[incast_servers];
+	ApplicationContainer app[incast_servers][num_flows];
 	ApplicationContainer sink;
 	
 	int target_edge = 0;
@@ -361,25 +361,28 @@ int main(int argc, char *argv[])
 	// Initialize Starting Time for the app on every host
 	uint64_t app_start_time = 50;	
 	// 1-process-per-host . Total number of hosts = incast_servers
-	for (i = 0; i < incast_servers; i++)
+	for (i = 0; i < (int)num_flows; i++)
 	{
-		// select a source (client)
-		int src_edge = (int)(i % (num_edge-1)) + 1;
-		int src_host = (int)(i / (num_host-1));
-		Ipv4Address targetIp = ipContainer[target_edge].GetAddress(target_host);
-		Address targetAddress = Address( InetSocketAddress( targetIp, port ));
+		for (j = 0; j < incast_servers; j++)
+		{
+			// select a source (client)
+			int src_edge = (int)(rand() % (num_edge-1) + 0) + 1;
+			int src_host = (int)(rand() % (num_host-1) + 0);
+			Ipv4Address targetIp = ipContainer[target_edge].GetAddress(target_host);
+			Address targetAddress = Address( InetSocketAddress( targetIp, port ));
 
-		// Initialize BulkSend Application with address of target, and Flowsize
-		uint32_t bytesToSend = incast_flow_size;
-		BulkSendHelper bs = BulkSendHelper("ns3::TcpSocketFactory", targetAddress);
-		bs.SetAttribute ("MaxBytes", UintegerValue (bytesToSend));
-		bs.SetAttribute ("SendSize", UintegerValue (1460));
+			// Initialize BulkSend Application with address of target, and Flowsize
+			uint32_t bytesToSend = incast_flow_size;
+			BulkSendHelper bs = BulkSendHelper("ns3::TcpSocketFactory", targetAddress);
+			bs.SetAttribute ("MaxBytes", UintegerValue (bytesToSend));
+			bs.SetAttribute ("SendSize", UintegerValue (1460));
 
-		// Install BulkSend Application to the sending node (client)
-		NodeContainer bulksend;
-		bulksend.Add(host[src_edge].Get(src_host));
-		app[i] = bs.Install (bulksend);
-		app[i].Start (NanoSeconds (app_start_time));
+			// Install BulkSend Application to the sending node (client)
+			NodeContainer bulksend;
+			bulksend.Add(host[src_edge].Get(src_host));
+			app[j][i] = bs.Install (bulksend);
+			app[j][i].Start (Seconds (i) + NanoSeconds (app_start_time));
+		}
 	}
 
 	// Packet Sink in one fixed destination host

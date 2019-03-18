@@ -8,7 +8,7 @@ ns3='./ns3.29-workspace-dev'
 processors=10
 
 # number of flows to send
-flows=300000
+flows=100000
 
 # queue buffer size
 buff=42400
@@ -17,10 +17,10 @@ buff=42400
 thresh=10
 
 # PBS Alpha Values
-alphas=(0 1 5 7 10 15 80 200 400 800 1000)
+alphas=(0 10 100 1000)
 
 # Workload Profiles
-profiles=(5)
+profiles=(1)
 
 # Desired Network Load
 load=0.8
@@ -33,11 +33,14 @@ load_multipliers=(3.5 4 5 6 7) # 1:1 samethresh @80% load mutlipliers
 # Oversubscribed?
 oversub=false
 
+# Nonblind?
+nonblind=true
+
 # Same DCTCP Thresholds?
 samethresh=false
 
 # Description of this Experiment
-description="80% Load, W1, 1:1 Subscription, Seeking Optimal"
+description="80% Load, W1, 1:1 Subscription, Nonblind"
 
 # Pipeline Script Control Switches
 run_simulations=true # if false, expects pre-populated tmp dir
@@ -125,6 +128,7 @@ echo "load:         	$load" 				>> "$configfile"
 echo "load_multipliers: (${load_multipliers[*]})" 	>> "$configfile"
 echo "samethresh:       $samethresh"			>> "$configfile"
 echo "oversub:       	$oversub"			>> "$configfile"
+echo "nonblind:       	$nonblind"			>> "$configfile"
 echo "description:	$description"			>> "$configfile"
 
 # initialize pids arrays for new jobs, and zero proccount
@@ -163,6 +167,7 @@ if [ "$run_simulations" = true ]; then
 			args+=" --tag=a${A}"
 			args+=" --load=$load"
  			args+=" --oversub=$oversub"
+ 			args+=" --nonblind=$nonblind"
 			args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 			echo "Running Sim with args: $args"
 			sudo ./waf --run "$args" & sim_pids+=("$!")
@@ -183,6 +188,7 @@ if [ "$run_simulations" = true ]; then
 				args+=" --profile=$P"
 				args+=" --tag=a${A}_nodctcp"
  				args+=" --oversub=$oversub"
+ 				args+=" --nonblind=$nonblind"
 				args+=" --load=$load"
 				args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 				echo "Running Sim with args: $args"
@@ -212,6 +218,7 @@ if [ "$run_simulations" = true ]; then
 		args+=" --profile=$P"
 		args+=" --tag=dctcp"
  		args+=" --oversub=$oversub"
+ 		args+=" --nonblind=$nonblind"
 		args+=" --load=$load"
 		args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 		echo "Running Sim with args: $args"
@@ -233,6 +240,7 @@ if [ "$run_simulations" = true ]; then
 			args+=" --profile=$P"
 			args+=" --tag=nopbs_nodctcp"
  			args+=" --oversub=$oversub"
+ 			args+=" --nonblind=$nonblind"
 			args+=" --load=$load"
 			args+=" --loadMultiplier=${load_multipliers[$((P-1))]}"
 			echo "Running Sim with args: $args"
