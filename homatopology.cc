@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
 
 	string cdf_filename = "";
 	string output_directory = "";
-	uint32_t sim_duration = 6000;
+	uint32_t sim_duration = 6000; // Microseconds
 	cout << "Profile = " << profile << "\n";
 	switch (profile)
 	{
@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
 			cdf_filename = "./sizeDistributions/DCTCP_MsgSizeDist.txt";
 			output_directory = "./results/W5/";
 			tag = "w5_" + tag;
-			sim_duration = 24000;
+			sim_duration = 40000;
 			break;
 	}
 

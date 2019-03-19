@@ -5,7 +5,7 @@
 ns3='./ns3.29-workspace-dev'
 
 # number of processors on this machine
-processors=16
+processors=10
 
 # number of flows to send
 flows=300000
@@ -17,7 +17,8 @@ buff=42400
 thresh=10
 
 # PBS Alpha Values
-alphas=(4 6 1000)
+	#alphas=(10 1000) # blind alphas
+alphas=(6 1000) # nonblind alphas
 
 # Workload Profiles
 profiles=(1 2 3 4 5)
@@ -40,7 +41,7 @@ nonblind=true
 samethresh=false
 
 # Description of this Experiment
-description="80% Load, W1-5, 1:1 Subscription, Nonblind"
+description="80% Load, W1-5, 1:1 Subscription, NonBlind"
 
 # Pipeline Script Control Switches
 run_simulations=true # if false, expects pre-populated tmp dir
