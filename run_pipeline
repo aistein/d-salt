@@ -8,7 +8,7 @@ ns3='./ns3.29-workspace-dev'
 processors=16
 
 # number of flows to send
-flows=50000
+flows=100000
 
 # queue buffer size
 buff=42400
@@ -17,7 +17,7 @@ buff=42400
 thresh=10
 
 # PBS Alpha Values
-alphas=(1 6 1000)
+alphas=(4 6 7 8)
 
 # Workload Profiles
 profiles=(1 2 3)
@@ -40,7 +40,7 @@ nonblind=true
 samethresh=false
 
 # Description of this Experiment
-description="80% Load, W1-3, Alpha=1:6:1000, 1:1 Subscription, Nonblind"
+description="80% Load, W1-3, Alpha=1:6:7:1000, 1:1 Subscription, Nonblind"
 
 # Pipeline Script Control Switches
 run_simulations=true # if false, expects pre-populated tmp dir
@@ -118,7 +118,7 @@ echo "-I- run_pipeline: to check status, run \"tail -f ${logfile}\""
 exec > "$logfile" 2>&1
 
 # print run configurations to config file for reference
-configfile="./run_pipeline-${date}.config"
+configfile="./run_pipeline-${date}-config.txt"
 echo "flows:        	$flows"				>> "$configfile"
 echo "buff:         	$buff" 				>> "$configfile"
 echo "thresh:       	$thresh" 			>> "$configfile"
