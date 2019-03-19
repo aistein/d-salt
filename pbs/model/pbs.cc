@@ -223,7 +223,8 @@ namespace ns3 {
 				break;
 			case 3: // W3 (alpha = 10)
 				if (m_nonBlind) {
-					limits = {4.1604e-37, 2.75841e-38, 7.28671e-39, 3.57929e-39, 1.72651e-39, 6.96279e-40, 2.26281e-40, 2.82834e-41};
+					limits = {7.46415e-36, 2.4216e-38, 5.70689e-39, 2.40171e-39, 1.00258e-39, 4.90344e-40, 1.85818e-40, 4.10319e-41};
+					//limits = {4.1604e-37, 2.75841e-38, 7.28671e-39, 3.57929e-39, 1.72651e-39, 6.96279e-40, 2.26281e-40, 2.82834e-41};
 					//limits = {3.6527e-38, 1.1489e-38, 5.433e-39, 2.8375e-39, 1.316e-39, 4.943e-40, 1.4986e-40};
 				} else {
 					limits = {5.8e-21, 7.3e-26, 9e-31, 1.1e-35, 1.3e-40, 1.6e-45, 2e-50, 2.5e-55};
@@ -231,14 +232,18 @@ namespace ns3 {
 				break;
 			case 4: // W4 (alpha = 10)
 				if (m_nonBlind) {
-					limits = {1.62e-05, 1.32e-16, 1.07e-27, 8.76e-39, 7.13e-50, 5.8e-61, 4.72e-72, 3.84e-83};
+					limits = {1.75064e-35, 3.27967e-37, 1.03718e-37, 4.73471e-38, 2.3662e-38, 1.16651e-38, 5.71894e-39, 1.90036e-39};
+					//limits = {1.42897e-41, 3.32968e-49, 1.58941e-54, 4.02692e-58, 4.00434e-62, 4.20953e-67, 1.11941e-67, 1.86391e-68};
+					//limits = {1.62e-05, 1.32e-16, 1.07e-27, 8.76e-39, 7.13e-50, 5.8e-61, 4.72e-72, 3.84e-83};
 				} else {
 					limits = {2.6e-21, 1.2e-26, 5.3e-32, 2.4e-37, 1.1e-42, 4.9e-48, 2.2e-53, 1e-58};
 				}
 				break;
 			case 5: // W5 (alpha = 10)
 				if (m_nonBlind) {
-					limits = {4.71e-05, 3.94e-16, 3.3e-27, 2.76e-38, 2.31e-49, 1.94e-60, 1.62e-71, 1.36e-82};
+					limits = {4.28436e-29, 4.7178e-36, 9.17517e-37, 2.76119e-37, 1.10387e-37, 5.29671e-38, 2.4704e-38, 9.65756e-39};
+					//limits = {1.33137e-48, 3.86956e-55, 1.43643e-59, 3.79086e-63, 3.35128e-65, 1.13623e-66, 3.13629e-67, 8.19613e-68};
+					//limits = {4.71e-05, 3.94e-16, 3.3e-27, 2.76e-38, 2.31e-49, 1.94e-60, 1.62e-71, 1.36e-82};
 				} else {
 					limits = {1.2e-21, 2.7e-27, 6e-33, 1.3e-38, 3e-44, 6.5e-50, 1.4e-55, 3.2e-61};
 				}
@@ -295,7 +300,9 @@ namespace ns3 {
 		Ptr<Packet> pkt = item->GetPacket ();
 		TcpHeader tcpHdr;
 		if ( pkt->PeekHeader (tcpHdr) ) {
-			if ( tcpHdr.GetFlags() & TcpHeader::SYN ) {
+			//uint8_t tcp_mask = TcpHeader::SYN | TcpHeader::ACK | TcpHeader::FIN;
+			uint8_t tcp_mask = TcpHeader::SYN | TcpHeader::FIN;
+			if ( ((tcpHdr.GetFlags() & tcp_mask) == (tcp_mask)) || (tcpHdr.GetSourcePort() == 9) ) {
 				bin_prio = 0;
 			} else {
 
@@ -323,8 +330,8 @@ namespace ns3 {
 				ref.timeLastTxPacket = Simulator::Now();
 				ref.flowAge = ref.timeLastTxPacket - ref.timeFirstTxPacket;
 
-				if (!m_usePbs) {
-					bin_prio = 0; // No PBS, all packets on Q-0
+				if ( !m_usePbs ) {
+					bin_prio = 0;
 				} else {
 					const_cast<PbsPacketFilter*>(this)->MakePrioLimits();
 					if (m_nonBlind) {
@@ -340,7 +347,7 @@ namespace ns3 {
 							if (raw_prio <= m_prioLimits[bin_prio])
 								break;
 						}
-					} else {
+					} else { // first packet in blind scenario always prio-0
 						bin_prio = 0;
 					}
 				}

@@ -8,7 +8,7 @@ ns3='./ns3.29-workspace-dev'
 processors=16
 
 # number of flows to send
-flows=100000
+flows=300000
 
 # queue buffer size
 buff=42400
@@ -17,18 +17,18 @@ buff=42400
 thresh=10
 
 # PBS Alpha Values
-alphas=(4 6 7 8)
+alphas=(4 6 1000)
 
 # Workload Profiles
-profiles=(1 2 3)
+profiles=(1 2 3 4 5)
 
 # Desired Network Load
 load=0.8
 
 # Load Multipliers
 load_multipliers=(3.5 4 5 6 7) # 1:1 samethresh @80% load mutlipliers
-#load_multipliers=(7 9.5 13 30 120) # 80% load multipliers
-#load_multipliers=(8 10 14 34 125) # 90% load multipliers
+	#load_multipliers=(7 9.5 13 30 120) # 80% load multipliers
+	#load_multipliers=(8 10 14 34 125) # 90% load multipliers
 
 # Oversubscribed?
 oversub=false
@@ -40,13 +40,13 @@ nonblind=true
 samethresh=false
 
 # Description of this Experiment
-description="80% Load, W1-3, Alpha=1:6:7:1000, 1:1 Subscription, Nonblind"
+description="80% Load, W1-5, 1:1 Subscription, Nonblind"
 
 # Pipeline Script Control Switches
 run_simulations=true # if false, expects pre-populated tmp dir
 upload=true # if true, upload results to GCS
 clean=true # if true, remove all temporary files
-categorize_flows=false # generate flow category plots
+categorize_flows=true # generate flow category plots
 without_dctcp=false # add "without_dctcp" to sims
 scatterplots=false # graph slowdown & fct scatters
 #----------- end user configurations --------------------------
@@ -392,6 +392,7 @@ if [ "$upload" = true ]; then
 		sudo gsutil -m cp -r results/W"$i"/* gs://homa-pbs/Simulations_"$date"/W"$i"/
 		sudo gsutil -m cp -r tmp/W"$i"/*.xml gs://homa-pbs/Simulations_"$date"/W"$i"/data/
 		sudo gsutil -m cp -r tmp/W"$i"/*.load.tr gs://homa-pbs/Simulations_"$date"/W"$i"/data/
+		sudo gsutil -m cp -r tmp/W"$i"/*.rawprio gs://homa-pbs/Simulations_"$date"/W"$i"/data/
 	done
 
 fi # if upload
