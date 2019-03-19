@@ -8,7 +8,7 @@ ns3='./ns3.29-workspace-dev'
 processors=8
 
 # number of flows per incast degree
-flows=100
+flows=1000
 
 # number of incast senders
 senders=128
