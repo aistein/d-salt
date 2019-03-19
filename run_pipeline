@@ -373,10 +373,11 @@ plot_runtime=$((plot_finish-load_finish))
 echo "-I- run_pipeline: remaining plots finished in $plot_runtime (s)." > /dev/tty
 echo "-I- run_pipeline: remaining plots finished in $plot_runtime (s)."
 
-# move logs and graphs into results folder
+# move logs, data, and graphs into results folder
 for i in "${profiles[@]}"; do
 	sudo mv w"$i"*.png results/W$i/plots
 	sudo mv w"$i"*timebounds.txt results/W$i/data
+	sudo mv tmp/W"$i"/* results/W"$i"/data
 done
 
 if [ "$upload" = true ]; then
@@ -390,9 +391,6 @@ if [ "$upload" = true ]; then
 		sudo gsutil -m cp "$logfile" gs://homa-pbs/Simulations_"$date"/
  		sudo gsutil -m cp -r logs/W"$i"/* gs://homa-pbs/Simulations_"$date"/W"$i"/logs/
 		sudo gsutil -m cp -r results/W"$i"/* gs://homa-pbs/Simulations_"$date"/W"$i"/
-		sudo gsutil -m cp -r tmp/W"$i"/*.xml gs://homa-pbs/Simulations_"$date"/W"$i"/data/
-		sudo gsutil -m cp -r tmp/W"$i"/*.load.tr gs://homa-pbs/Simulations_"$date"/W"$i"/data/
-		sudo gsutil -m cp -r tmp/W"$i"/*.rawprio gs://homa-pbs/Simulations_"$date"/W"$i"/data/
 	done
 
 fi # if upload
