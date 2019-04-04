@@ -1,0 +1,216 @@
+#!/bin/bash
+
+#---------- begin user configurations -------------------------
+# ns3 build area
+ns3='./ns3.29-workspace-dev'
+# number of flows to send
+flows=50
+# queue buffer size
+buff=42400
+# DCTCP threshold
+thresh=10
+# PBS Alpha Values
+alphas=(0.1 1 10 100 1000000)
+# Tag Addon
+addon="" # leave empty-string if not running parallel instances of this script, else "-<run name>"
+
+# Plot Generation Switches
+run_simulations=true # if false, expects pre-populated tmp dir
+upload=true # if true, upload results to GCS
+clean=false # if true, remove all temporary files
+#----------- end user configurations --------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# script start-time
+start=`date +%s`
+
+# function to wait for a bunch of jobs to finish
+synchronization_barrier () {
+	arr=("$@")
+	for pid in "${arr[@]}"; do
+		wait "$pid"
+	done
+}
+
+# date as UID for gcloud buckets
+date=`date +"%m_%d_%Y-%H-%M"`
+
+# make necessary directories
+if [ ! -d "results/small" ]; then
+	mkdir -p results/small/plots
+	mkdir -p results/small/data
+	mkdir -p $ns3/results/small
+	mkdir -p tmp/small
+	mkdir -p logs/small
+fi
+
+# clean out all old files from previous/local runs
+if [ "$clean" = true ]; then
+	sudo rm -f *timebounds.txt
+	sudo rm -f *mv_avg_bounds.txt
+	sudo rm -f *.png
+	sudo rm -f *.log
+	sudo rm -f tmp/small/*
+	sudo rm -f logs/small/*
+	sudo rm -f results/small/plots/*
+	sudo rm -f results/small/data/*
+	sudo rm -f $ns3/results/small/*
+fi
+
+# redirect stdout and stderr to logfile
+logfile="./run_pipeline_small-${date}.log"
+echo "-I- run_pipeline_small: running..."
+echo "-I- run_pipeline_small: to check status, run \"tail -f ${logfile}\""
+exec > "$logfile" 2>&1
+
+# print run configurations to config file for reference
+configfile="./run_pipeline_small-${date}.config"
+echo "flows:        	$flows"				>> "$configfile"
+echo "buff:         	$buff" 				>> "$configfile"
+echo "thresh:       	$thresh" 			>> "$configfile"
+echo "alphas:       	(${alphas[@]})" 		>> "$configfile"
+echo "profile:     	small"		 		>> "$configfile"
+echo "addon:        	$addon" 			>> "$configfile"
+
+# initialize pids array for new jobs
+sim_pids=()
+plot_pids=()
+
+# if "run_simulations" is disabled, "tmp/..." directories are expected to be pre-populated
+if [ "$run_simulations" = true ]; then
+
+	# enter ns3 directory to run simulations
+	pushd $ns3
+	
+	# rebuild once before parallel deployments - avoids "compilation collision" between threads
+	sudo ./waf build
+	
+	# Simulations With PBS
+	for A in "${alphas[@]}";
+        do
+        args="scratch/smallflows-3layer-removeTracking"
+		args+=" --apps=$flows"
+		args+=" --buff=$buff"
+		args+=" --alpha=$A"
+		args+=" --thresh=$thresh"
+		args+=" --profile=7"
+		args+=" --tag=a${A}${addon}"
+		args+=" --time_per=0.5"
+		args+=" --progress_period=100"
+		echo "Running Sim with args: $args"
+		sudo ./waf --run "$args" & sim_pids+=("$!")
+	done
+
+	# Simulations Without PBS
+	thresh="$(($thresh*8))" # 8x DCTCP threshold for no-priority simulations
+	args="scratch/smallflows-3layer-removeTracking"
+	args+=" --apps=$flows"
+	args+=" --buff=$buff"
+	args+=" --usePbs=false"
+	args+=" --thresh=$thresh"
+	args+=" --profile=7"
+	args+=" --tag=dctcp$addon"
+	args+=" --time_per=0.5"
+	args+=" --progress_period=100"
+	echo "Running Sim with args: $args"
+	
+        #sudo ./waf --run "$args" & sim_pids+=("$!")
+	
+	# wait for simulations to complete
+	echo "-I- run_pipeline_small: simulations deployed..." > /dev/tty
+	echo "-I- run_pipeline_small: simulations deployed..."
+	synchronization_barrier "${sim_pids[@]}"
+	sim_finish=`date +%s`
+	sim_runtime=$((sim_finish-start))
+	echo "-I- run_pipeline_small: simulations completed in $sim_runtime (s)." > /dev/tty
+	echo "-I- run_pipeline_small: simulations completed in $sim_runtime (s)."
+	
+	# move back into original directory to run graph-gen scripts
+	popd
+	
+fi # if run_simulations
+
+if [ "$run_simulations" = true ]; then
+	# move ns3 simulation outputs into local tmp directory
+	if [ "$addon" != "" ];
+	then
+		sudo mv $ns3/results/small/*${addon}* tmp/small
+	else
+		sudo mv $ns3/results/small/* tmp/small
+	fi
+fi
+
+echo "-I- run_pipeline_small: generating plots..." > /dev/tty
+echo "-I- run_pipeline_small: generating plots..."
+
+# calculate priority distirbution histograms
+for filepath in tmp/small/*.prio; do
+	filename="$(basename -- $filepath)"
+	sudo ./scripts/histogram.py "$filepath" &> ./logs/small/${filename}.log & plot_pids+=("$!")
+done
+
+sudo ./scripts/ftc-cdf-smallFlows.py tmp/small/ & plot_pids+=("$!")
+
+# wait for all plotting scripts to complete
+synchronization_barrier "${plot_pids[@]}"
+plot_finish=`date +%s`
+plot_runtime=$((plot_finish-sim_finish))
+echo "-I- run_pipeline_small: remaining plots finished in $plot_runtime (s)." > /dev/tty
+echo "-I- run_pipeline_small: remaining plots finished in $plot_runtime (s)."
+
+# move logs and graphs into results folder
+sudo mv small*.png results/small/plots
+
+if [ "$upload" = true ]; then
+
+	# copy results to gcloud storage
+	echo "-I- run_pipeline_small: transferring results to gcloud storage..." > /dev/tty
+	echo "-I- run_pipeline_small: transferring results to gcloud storage..."
+	sudo rm -f /etc/boto.cfg
+	sudo gsutil -m cp "$configfile" gs://homa-pbs/small_Simulations_$date/
+	sudo gsutil -m cp "$logfile" gs://homa-pbs/small_Simulations_$date/
+	sudo gsutil -m cp -r results/small/* gs://homa-pbs/small_Simulations_$date/
+	sudo gsutil -m cp -r tmp/small/*.xml gs://homa-pbs/small_Simulations_$date/data/
+	sudo gsutil -m cp -r tmp/small/*.load.tr gs://homa-pbs/small_Simulations_$date/data/
+
+fi # if upload
+
+if [ "$clean" = true ]; then
+
+	# clean out temporary files and results, but leave the logs
+	echo "-I- run_pipeline_small: removing local temporary files..." > /dev/tty
+	echo "-I- run_pipeline_small: removing local temporary files..."
+	sudo rm -f tmp/small/*
+	sudo rm -f results/small/plots/*
+	sudo rm -f results/small/data/*
+	sudo rm -f $ns3/results/small/*
+
+fi # if clean
+
+# print run stats
+finish=`date +%s`
+runtime=$((finish-start))
+echo "-I- run_pipeline_small: finished in $runtime (s)." > /dev/tty
+echo "-I- run_pipeline_small: finished in $runtime (s)."
+echo "-I- run_pipeline_small: output logged to: ${logfile}" > /dev/tty
+echo "-I- run_pipeline_small: output logged to: ${logfile}"
+
+# bring output back to the terminal, exit
+exec &>/dev/tty 
+exit
+

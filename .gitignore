@@ -1,5 +1,5 @@
 ns3.29-workspace-dev
-run_pipeline.conf
+*.conf
 *.config
 *.log
 *.txt
