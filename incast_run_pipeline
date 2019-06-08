@@ -96,7 +96,8 @@ if [ "$run_simulations" = true ]; then
 	# Simulations With PBS
 	for A in "${alphas[@]}";
 	do
-		for S in "$sendrange";
+		#for S in "$sendrange";
+		for S in $sendrange;
 		do
 			proccount=$(($proccount+1))
 			if [ $proccount == $processors ]; then
@@ -126,7 +127,7 @@ if [ "$run_simulations" = true ]; then
 	if [ "$samethresh" = false ]; then
 		thresh="$(($thresh*8))" # 8x DCTCP threshold for no-priority simulations
 	fi
-	for S in "$sendrange";
+	for S in $sendrange;
 	do
 		proccount=$(($proccount+1))
 		if [ $proccount == $processors ]; then
@@ -187,8 +188,8 @@ done
 # generate boxplots for dctcp and pbs
 if [ "$sweepdegrees" == true ]; then
 	sudo ./scripts/incast_whiskers.py tmp/incast/ &> ./logs/incast/incast_whiskers.log & plot_pids+=("$!")
-	sudo ./scripts/incast_flowsizes.py tmp/incast/ &> ./logs/incast/incast_flowsizes.log & plot_pids+=("$!")
-	sudo ./scripts/incast-fct-99.py tmp/incast/ &> ./logs/incast/incast_fct_99.log & plot_pids+=("$!")
+	#sudo ./scripts/incast_flowsizes.py tmp/incast/ &> ./logs/incast/incast_flowsizes.log & plot_pids+=("$!")
+	#sudo ./scripts/incast-fct-99.py tmp/incast/ &> ./logs/incast/incast_fct_99.log & plot_pids+=("$!")
 else
 	args=("tmp/incast/incast_dctcp_s${senders}.xml")
 	for A in "${alphas[@]}"; do

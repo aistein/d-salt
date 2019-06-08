@@ -7,6 +7,7 @@ import math
 import numpy as np
 from collections import defaultdict
 from tabulate import tabulate
+from cycler import cycler
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -134,7 +135,7 @@ class Flow(object):
         finish = long(flow_el.get('timeLastRxPacket')[:-4]) * 1.0e-9
 	tx_duration = float(long(flow_el.get('timeLastTxPacket')[:-4]) - long(flow_el.get('timeFirstTxPacket')[:-4]))*1e-9
         rx_duration = float(long(flow_el.get('timeLastRxPacket')[:-4]) - long(flow_el.get('timeFirstRxPacket')[:-4]))*1e-9
-	actual_duration = float(long(flow_el.get('timeLastRxPacket')[:-4]) - long(flow_el.get('timeFirstTxPacket')[:-4]))*1e-9
+	actual_duration = float(long(flow_el.get('timeLastRxPacket')[:-4]) - long(flow_el.get('timeFirstTxPacket')[:-4]))*1e-9 - 1.0
 	flowsize_bits = float(long(flow_el.get('txBytes')))*8.0
 	agg_capacity = float(40e9)
 	edge_capacity = float(10e9)
@@ -256,7 +257,7 @@ def main(argv):
         sim_names.append(sim_tag)
         #sim_names.append("_".join(xmlfile.split("/")[2].split(".")[0].split("_")[1:]))
         print "_".join(raw_simname)
-        print "Reading XML file \n",
+        print "Reading XML file " + xmlfile + ".\n",
  
         sys.stdout.flush()        
         level = 0
@@ -285,7 +286,10 @@ def main(argv):
     fig, ax = plt.subplots()
     plt.yticks(rotation=45)
     offset = 0.0
+    minfct, maxfct = float('inf'), float('-inf')
     for i, sim in enumerate(sim_list):
+
+        print "processing & plotting sim %s" % (sim_names[i])
         flows_of_interest = []
         flowsizes = []
 
@@ -306,7 +310,10 @@ def main(argv):
         # Break down CT by buckets
         fcts = []
         for flow in flows_of_interest:
+            print "flow duration %s" % (flow.rawDuration)
             if flow.rawDuration > 0:
+                minfct = min(minfct, flow.rawDuration)
+                maxfct = max(maxfct, flow.rawDuration)
                 fcts.append(float(flow.rawDuration))
 
         nbins = 1000
@@ -316,16 +323,20 @@ def main(argv):
         #y = norm.cdf(x, mu, sigma)
 
         offset += 0.02
-        cdf,bins,_ = plt.hist(fcts, bins=x, density=True, alpha=0.5, color=colors[i%10], linestyle='-', histtype='step', cumulative=True, label=None)
-        plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i%10], marker=markers[i%11], markevery=0.1+offset, markersize=10, linewidth='2')
+        cdf,bins,_ = plt.hist(fcts, bins=x, density=True, color=colors[i%10], linestyle='-', histtype='step', cumulative=True, label=None)
+        plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i%10])
+        #cdf,bins,_ = plt.hist(fcts, bins=x, density=True, alpha=0.5, color=colors[i%10], linestyle='-', histtype='step', cumulative=True, label=None)
+        #matplotlib.rcparams['axes.prop_cycle'] = cycler( markevery=0.1+offset, color=colors[i%10] )
+        #plt.plot(bins[:-1], cdf, linestyle=None, label=sim_names[i], color=colors[i%10], marker=markers[i%11], markersize=10, linewidth='2')
         #plt.plot(x, y, color=colors[i], linestyle='--', alpha=0.5, label=sim_names[i]+'_norm')
 
     #plt.rcParams.update({'font.size': 16})
     #plt.title(argv[1].split("/")[2].split(".")[0].split("_")[0] + " - Flow Completion Time CDF")
     plt.ylabel("Proportion of Flows", fontsize=16)
     plt.xlabel("Flow Completion Time (s)", fontsize=16)
-    plt.xscale('log')
-    plt.ylim(0.0,1.0)
+    #plt.xscale('log')
+    plt.xlim(4.5e-6,10e-06)
+    plt.ylim(0.0,1.1)
     plt.legend()
     fix_hist_step_vertical_line_at_end(ax)
     outfilename = argv[1].split("/")[2].split(".")[0].split("_")[0] + "_fct_cdf.png"

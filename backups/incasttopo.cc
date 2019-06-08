@@ -389,11 +389,10 @@ int main(int argc, char *argv[])
 	Ipv4Address targetIp = ipContainer[target_edge].GetAddress(target_host);
 	Address targetAddress = Address( InetSocketAddress( targetIp, port ));
 	// 1-process-per-host . Total number of hosts = incast_servers
-	//for (i = 0; i < (int)num_flows; i++)
-	//{
+	for (i = 0; i < (int)num_flows; i++)
+	{
 		vector<int> senders;
-		//for (int i=0; i<incast_servers; ++i) senders.push_back(i);
-		for (int i=0; i<incast_servers; ++i) senders.push_back( rand() % (total_host - num_host) + num_host );
+		for (int i=0; i<incast_servers; ++i) senders.push_back(i);
 		random_shuffle ( senders.begin(), senders.end() );
 		auto it = senders.begin();
 		for (j = 0; j < incast_servers; j++)
@@ -401,38 +400,24 @@ int main(int argc, char *argv[])
 			// select a source (client)
 			//int src_edge = (int)(rand() % (num_edge-1) + 0) + 1;
 			//int src_host = (int)(rand() % (num_host-1) + 0);
-			//int src_edge = (*it) / num_host + 1;
-			int src_edge = (*it) / num_host;
+			int src_edge = (*it) / num_host + 1;
 			int src_host = (*it) % num_host;
-			std::cout << "src=" << (*it) << "\tsrc_edge=" << src_edge << "\tsrc_host=" << src_host << std::endl;
+			std::cout << (*it) << "\t" << src_edge << "\t" << src_host << std::endl;
 			++it;
 
 			// Initialize BulkSend Application with address of target, and Flowsize
 			uint32_t bytesToSend = incast_flow_size;
-
-			//BulkSendHelper bs = BulkSendHelper("ns3::TcpSocketFactory", targetAddress);
-			//bs.SetAttribute ("MaxBytes", UintegerValue (bytesToSend));
-			//bs.SetAttribute ("SendSize", UintegerValue (1460));
-
-			IncastHelper is = IncastHelper("ns3::TcpSocketFactory", targetAddress);
-			is.SetAttribute ("MaxBytes", UintegerValue (bytesToSend));
-			is.SetAttribute ("SendSize", UintegerValue (1460));
-			//is.SetAttribute ("NumFlows", UintegerValue (1));
-			is.SetAttribute ("NumFlows", UintegerValue (num_flows));
+			BulkSendHelper bs = BulkSendHelper("ns3::TcpSocketFactory", targetAddress);
+			bs.SetAttribute ("MaxBytes", UintegerValue (bytesToSend));
+			bs.SetAttribute ("SendSize", UintegerValue (1460));
 
 			// Install BulkSend Application to the sending node (client)
-				//NodeContainer bulksend;
-				//bulksend.Add(host[src_edge].Get(src_host));
-				//app[j][i] = bs.Install (bulksend);
-				//app[j][i].Start (NanoSeconds (time_per_flow * i + (rand() % 1000))); // up to 1us random jitter
-			NodeContainer incast;
-			incast.Add(host[src_edge].Get(src_host));
-			// TODO: fixme - there is no meaningful 'i' anymore!
-			app[j][i] = is.Install (incast);
-			//app[j][i].Start (NanoSeconds (time_per_flow * i + (rand() % 1000))); // up to 1us random jitter
-			app[j][i].Start (NanoSeconds (time_per_flow * 0 + 100)); // up to 1us random jitter
+			NodeContainer bulksend;
+			bulksend.Add(host[src_edge].Get(src_host));
+			app[j][i] = bs.Install (bulksend);
+			app[j][i].Start (NanoSeconds (time_per_flow * i + (rand() % 1000))); // up to 1us random jitter
 		}
-	//}
+	}
 
 	// Packet Sink in one fixed destination host
 	for(i=0;i<num_edge;i++){
