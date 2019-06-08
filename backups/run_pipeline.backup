@@ -1,13 +1,81 @@
 #!/bin/bash
 
-# import configurations (UNSAFE!)
-if [ ! $# -eq 0 ]; then
-	config_file="$1"
-	source "$config_file"
-else
+##---------- begin user configurations -------------------------
+## ns3 build area
+#ns3='./ns3.29-workspace-dev'
+#
+## number of processors on this machine
+#processors=10
+#
+## number of flows to send
+#flows=300000
+#
+## queue buffer size
+#buff=42400
+#
+## DCTCP threshold
+#thresh=10
+#
+## PBS Alpha Values
+#alphas=(10 1000) # blind alphas
+#	#alphas=(6 1000) # nonblind alphas
+#
+## Workload Profiles
+#profiles=(1 2 3 4 5)
+#
+## Desired Network Load
+#load=0.8
+#
+## Load Multipliers
+#load_multipliers=(3.5 4 5 6 7) # 1:1 samethresh @80% load mutlipliers
+#	#load_multipliers=(7 9.5 13 30 120) # 80% load multipliers
+#	#load_multipliers=(8 10 14 34 125) # 90% load multipliers
+#
+## Oversubscribed?
+#oversub=false
+#
+## Nonblind?
+#nonblind=false
+#
+## Same DCTCP Thresholds?
+#samethresh=false
+#
+## Description of this Experiment
+#description="80% Load, W1-5, 1:1 Subscription, Blind"
+#
+## Pipeline Script Control Switches
+#run_simulations=true # if false, expects pre-populated tmp dir
+#upload=true # if true, upload results to GCS
+#clean=true # if true, remove all temporary files
+#categorize_flows=true # generate flow category plots
+#without_dctcp=false # add "without_dctcp" to sims
+#scatterplots=false # graph slowdown & fct scatters
+##----------- end user configurations --------------------------
+
+if [ $# -eq 0 ]; then
 	echo "usage: ./run_pipeline <config-file>.conf";
 	exit 1;
 fi
+config_file="$1"
+while IFS="=" read -r name value; do
+	export "$name"="${value}";
+done < "$config_file"
+
+echo "$description"
+exit 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # script start-time
 start=$(date +%s)
@@ -70,7 +138,6 @@ echo "load:         	$load" 				>> "$configfile"
 echo "load_multipliers: (${load_multipliers[*]})" 	>> "$configfile"
 echo "samethresh:       $samethresh"			>> "$configfile"
 echo "oversub:       	$oversub"			>> "$configfile"
-echo "simultaneous:	$simultaneous"			>> "$configfile"
 echo "nonblind:       	$nonblind"			>> "$configfile"
 echo "description:	$description"			>> "$configfile"
 

@@ -1,7 +1,9 @@
 ns3.29-workspace-dev
+*.conf
 *.config
 *.log
 *.txt
+*.png
 logs/
 results/
 tmp/

@@ -1,13 +1,55 @@
 #!/bin/bash
 
-# import configurations (UNSAFE!)
-if [ ! $# -eq 0 ]; then
-	config_file="$1"
-	source "$config_file"
-else
-	echo "usage: ./incast_run_pipeline <config-file>.conf";
-	exit 1;
-fi
+#---------- begin user configurations -------------------------
+# ns3 build area
+ns3='./ns3.29-workspace-dev'
+
+# number of processors on this machine
+processors=8
+
+# number of flows per incast degree
+flows=1000
+
+# number of incast senders
+senders=128
+
+# size of each incast flow
+flowsize=450000
+
+# queue buffer size
+buff=42400
+
+# DCTCP threshold
+thresh=10
+
+# PBS Alpha Values
+alphas=(10)
+
+# same threshold
+samethresh=true
+
+# description of this experiment
+description="Incast Scenario for 128-nodes, Same Threshold, 450kB flows, Alpha=10, 100-per-degree"
+
+# Plot Generation Switches
+run_simulations=true # if false, expects pre-populated tmp dir
+upload=true # if true, upload results to GCS
+clean=false # if true, remove all temporary files
+#----------- end user configurations --------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # script deploy location
 repo=$(pwd -P)
@@ -60,13 +102,10 @@ exec > "$logfile" 2>&1
 configfile="./incast_run_pipeline-${date}-config.txt"
 echo "description:      $description"			>> "$configfile"
 echo "incast-senders:   $senders"			>> "$configfile"
-echo "sweepdegrees:     $sweepdegrees"                  >> "$configfile"
-echo "debug:            $debug"                         >> "$configfile"
 echo "flows per degree: $flows"				>> "$configfile"
 echo "buff:         	$buff" 				>> "$configfile"
 echo "thresh:       	$thresh" 			>> "$configfile"
 echo "samethresh:      	$samethresh" 			>> "$configfile"
-echo "nonblind:       	$nonblind"			>> "$configfile"
 echo "alphas:       	(${alphas[*]})" 		>> "$configfile"
 echo "profile:     	incast"		 		>> "$configfile"
 
@@ -84,20 +123,10 @@ if [ "$run_simulations" = true ]; then
 	# rebuild once before parallel deployments - avoids "compilation collision" between threads
 	sudo ./waf build
 	
-	# sweep from 1 to N senders?
-	sendrange='0'
-	if [ "$sweepdegrees" == true ];
-	then
-		sendrange=$(seq 1 "$senders")
-	else
-		sendrange=("$senders")
-	fi
-	
 	# Simulations With PBS
 	for A in "${alphas[@]}";
 	do
-		#for S in "$sendrange";
-		for S in $sendrange;
+		for S in $(seq 1 "$senders");
 		do
 			proccount=$(($proccount+1))
 			if [ $proccount == $processors ]; then
@@ -108,14 +137,11 @@ if [ "$run_simulations" = true ]; then
 			args="scratch/incasttopo"
 			args+=" --apps=$flows"
 			args+=" --buff=$buff"
-			args+=" --sameBuff=$same_buff"
-			args+=" --debug=$debug"
 			args+=" --alpha=$A"
 			args+=" --thresh=$thresh"
 			#args+=" --thresh=80" // experimental
 			args+=" --profile=6"
 			args+=" --tag=a${A}_s${S}"
- 			args+=" --nonblind=$nonblind"
 			args+=" --incast_servers=$S"
 			args+=" --incastFlowSize=$flowsize"
 			echo "Running Sim with args: $args"
@@ -127,7 +153,7 @@ if [ "$run_simulations" = true ]; then
 	if [ "$samethresh" = false ]; then
 		thresh="$(($thresh*8))" # 8x DCTCP threshold for no-priority simulations
 	fi
-	for S in $sendrange;
+	for S in $(seq 1 "$senders");
 	do
 		proccount=$(($proccount+1))
 		if [ $proccount == $processors ]; then
@@ -138,8 +164,6 @@ if [ "$run_simulations" = true ]; then
 		args="scratch/incasttopo"
 		args+=" --apps=$flows"
 		args+=" --buff=$buff"
-		args+=" --sameBuff=$same_buff"
-		args+=" --debug=$debug"
 		args+=" --usePbs=false"
 		args+=" --thresh=$thresh"
 		args+=" --profile=6"
@@ -186,17 +210,9 @@ for filepath in tmp/incast/*.prio; do
 done
 
 # generate boxplots for dctcp and pbs
-if [ "$sweepdegrees" == true ]; then
-	sudo ./scripts/incast_whiskers.py tmp/incast/ &> ./logs/incast/incast_whiskers.log & plot_pids+=("$!")
-	#sudo ./scripts/incast_flowsizes.py tmp/incast/ &> ./logs/incast/incast_flowsizes.log & plot_pids+=("$!")
-	#sudo ./scripts/incast-fct-99.py tmp/incast/ &> ./logs/incast/incast_fct_99.log & plot_pids+=("$!")
-else
-	args=("tmp/incast/incast_dctcp_s${senders}.xml")
-	for A in "${alphas[@]}"; do
-		args+=("tmp/incast/incast_a${A}_s${senders}.xml")
-	done
-	sudo ./scripts/fct-cdf-incast.py "${args[@]}" &> ./logs/incast/incast_fct_cdf.log & plot_pids+=("$!")
-fi
+sudo ./scripts/incast_whiskers.py tmp/incast/ &> ./logs/incast/incast_whiskers.log & plot_pids+=("$!")
+sudo ./scripts/incast_flowsizes.py tmp/incast/ &> ./logs/incast/incast_flowsizes.log & plot_pids+=("$!")
+sudo ./scripts/incast-fct-99.py tmp/incast/ &> ./logs/incast/incast_fct_99.log & plot_pids+=("$!")
 
 # wait for all plotting scripts to complete
 synchronization_barrier "${plot_pids[@]}"
@@ -206,13 +222,9 @@ echo "-I- incast_run_pipeline: remaining plots finished in $plot_runtime (s)." >
 echo "-I- incast_run_pipeline: remaining plots finished in $plot_runtime (s)."
 
 # move graphs into results folder
-if [ "$sweepdegrees" == true ]; then
-	sudo mv incast*.png results/incast/plots
-	sudo mv *fairness.png results/incast/plots
-	sudo mv *incast_sizes.png results/incast/plots
-else
-	sudo mv incast_fct_cdf.png results/incast/plots
-fi
+sudo mv incast*.png results/incast/plots
+sudo mv *fairness.png results/incast/plots
+sudo mv *incast_sizes.png results/incast/plots
 
 if [ "$upload" = true ]; then
 
@@ -225,8 +237,7 @@ if [ "$upload" = true ]; then
 	sudo gsutil -m cp -r results/incast/* gs://homa-pbs/Incast_Simulations_$date/
 	sudo gsutil -m cp -r logs/incast/* gs://homa-pbs/Incast_Simulations_$date/logs/
 	sudo gsutil -m cp -r tmp/incast/*.xml gs://homa-pbs/Incast_Simulations_$date/data/
-	sudo gsutil -m cp -r tmp/incast/*.pcap gs://homa-pbs/Incast_Simulations_$date/data/
-	sudo gsutil -m cp -r tmp/incast/*prio* gs://homa-pbs/Incast_Simulations_$date/data/
+	sudo gsutil -m cp -r tmp/incast/*.load.tr gs://homa-pbs/Incast_Simulations_$date/data/
 
 fi # if upload
 
