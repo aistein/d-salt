@@ -70,7 +70,6 @@ echo "load:         	$load" 				>> "$configfile"
 echo "load_multipliers: (${load_multipliers[*]})" 	>> "$configfile"
 echo "samethresh:       $samethresh"			>> "$configfile"
 echo "oversub:       	$oversub"			>> "$configfile"
-echo "simultaneous:	$simultaneous"			>> "$configfile"
 echo "nonblind:       	$nonblind"			>> "$configfile"
 echo "description:	$description"			>> "$configfile"
 
