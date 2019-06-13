@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>Working With Tfrecords | D-SALT</title>
+<meta name="generator" content="Jekyll v3.8.5" />
+<meta property="og:title" content="Working With Tfrecords" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Every deep neural network training algorithm revolves around a stream of input data to train on. In Tensorflow the preferred method for data input is via tfrecords. Tfrecords are a binary file format of your data using Google’s protocol buffers which provide fast and efficient disk reads. Tfrecords also allow datasets to be split across multiple files in case they do not fit in memory." />
+<meta property="og:description" content="Every deep neural network training algorithm revolves around a stream of input data to train on. In Tensorflow the preferred method for data input is via tfrecords. Tfrecords are a binary file format of your data using Google’s protocol buffers which provide fast and efficient disk reads. Tfrecords also allow datasets to be split across multiple files in case they do not fit in memory." />
+<link rel="canonical" href="http://localhost:4000/2018/04/25/working-with-tfrecords.html" />
+<meta property="og:url" content="http://localhost:4000/2018/04/25/working-with-tfrecords.html" />
+<meta property="og:site_name" content="D-SALT" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-04-25T00:00:00-04:00" />
+<script type="application/ld+json">
+{"description":"Every deep neural network training algorithm revolves around a stream of input data to train on. In Tensorflow the preferred method for data input is via tfrecords. Tfrecords are a binary file format of your data using Google’s protocol buffers which provide fast and efficient disk reads. Tfrecords also allow datasets to be split across multiple files in case they do not fit in memory.","@type":"BlogPosting","url":"http://localhost:4000/2018/04/25/working-with-tfrecords.html","headline":"Working With Tfrecords","dateModified":"2018-04-25T00:00:00-04:00","datePublished":"2018-04-25T00:00:00-04:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2018/04/25/working-with-tfrecords.html"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="D-SALT" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">D-SALT</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Working With Tfrecords</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2018-04-25T00:00:00-04:00" itemprop="datePublished">Apr 25, 2018
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>Every deep neural network training algorithm revolves around a stream of input data to train on. In Tensorflow the preferred method for data input is via tfrecords. Tfrecords are a binary file format of your data using Google’s protocol buffers which provide fast and efficient disk reads. Tfrecords also allow datasets to be split across multiple files in case they do not fit in memory.</p>
+
+<p>The list of advantages is long, but unfortunately in the mass of improvement and development done on Tensorflow, the tfrecords api was left poorly documented and poorly explained. One issue raised on github sums this up quite nicely.</p>
+
+<p><img src="/dlprof/assets/tfrecords_documentation_dne.png" alt="Documentation Missing" /></p>
+
+<p>So, how exactly do we create tfrecords? Below we have provided an example of turning strings into tfrecords of variable length. This example is important because all the examples in Tensorflow documentation transform images of the same size into TFRecrds of the same size. We, on the other hand will be working with text data, and would like tensorflow to handle the embedding creation and word-to-index transformation for us.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mf">1.</span>  <span class="k">def</span> <span class="nf">to_bytearray_feature</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+<span class="mf">2.</span>      <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">bytes_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">BytesList</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="nb">bytes</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s">"utf8"</span><span class="p">)]))</span>
+<span class="mf">3.</span>  <span class="k">def</span> <span class="nf">wrap_float_value</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+<span class="mf">4.</span>      <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">float_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">FloatList</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="n">value</span><span class="p">]))</span>
+<span class="mf">5.</span>  
+<span class="mf">6.</span>  <span class="n">tfrecords_filename</span> <span class="o">=</span> <span class="s">"data/demo.tfrecords"</span>
+<span class="mf">7.</span>  <span class="n">writer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">python_io</span><span class="o">.</span><span class="n">TFRecordWriter</span><span class="p">(</span><span class="n">tfrecords_filename</span><span class="p">)</span>
+<span class="mf">8.</span>  
+<span class="mf">9.</span>  <span class="k">for</span> <span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">rating</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">train_user_lines</span><span class="p">,</span> <span class="n">train_item_lines</span><span class="p">,</span> <span class="n">train_ratings</span><span class="p">):</span>
+<span class="mf">10.</span>     <span class="n">example</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Example</span><span class="p">(</span>
+<span class="mf">11.</span>         <span class="n">features</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Features</span><span class="p">(</span>
+<span class="mf">12.</span>             <span class="n">feature</span><span class="o">=</span><span class="p">{</span>
+<span class="mf">13.</span>                 <span class="s">'user_review'</span><span class="p">:</span> <span class="n">to_bytearray_feature</span><span class="p">(</span><span class="n">user</span><span class="p">),</span>
+<span class="mf">14.</span>                 <span class="s">'item_review'</span><span class="p">:</span> <span class="n">to_bytearray_feature</span><span class="p">(</span><span class="n">item</span><span class="p">),</span>
+<span class="mf">15.</span>                 <span class="s">'rating'</span><span class="p">:</span> <span class="n">wrap_float_value</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">rating</span><span class="p">))</span>
+<span class="mf">16.</span>             <span class="p">}</span>
+<span class="mf">17.</span>         <span class="p">)</span>
+<span class="mf">18.</span>     <span class="p">)</span>
+<span class="mf">19.</span> 
+<span class="mf">20.</span>     <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">example</span><span class="o">.</span><span class="n">SerializeToString</span><span class="p">())</span>
+</code></pre></div></div>
+
+<p>First, we will analyze the first two lines, inside out.</p>
+
+<ol>
+  <li><code class="highlighter-rouge">bytes(value, "utf8")</code> - This converts the input into it’s utf-8 encoded representation</li>
+  <li><code class="highlighter-rouge">tf.train.BytesList(value=[...])</code> - This method has one required argument, value, which must by a <em>list of bytes</em>. For us this is a list of length one where the bytes represent the original sentence.</li>
+  <li><code class="highlighter-rouge">tf.train.Feature(bytes_list=...)</code> - This creates a Tensorflow Feature object, and accepts one of <code class="highlighter-rouge">bytes_list, float_list, int64_list</code>. In our case we pass <code class="highlighter-rouge">bytes_list</code></li>
+</ol>
+
+<p>Lines 3 - 4 are extremely similar except we create a FloatList. Again, this list has exactly one element, the input value. Continuing on, in lines 11 - 17 we create a set of Features. Features take one named input <code class="highlighter-rouge">feature</code>, which must be a dictionary of string to <code class="highlighter-rouge">tf.train.Feature</code> objects. Notice that at this point we are using the previously defined functions to create <code class="highlighter-rouge">Feature</code> objects around the <code class="highlighter-rouge">user, item, rating</code> objects. In this specific case user and item are both a string, but rating is an integer which is why it needs to be cast to a float. Finally, lines 10 - 20 create an <code class="highlighter-rouge">Example</code> object, this object takes one <code class="highlighter-rouge">features</code> input. If you’re wondering why this is wrapped so many times, you aren’t alone, I wondered the same thing. This api could probably be more well designed by wrapping our dictionary for us, or taking native python dictionary objects representing features directly as input to the <code class="highlighter-rouge">Example</code> constructor.</p>
+
+<p>In lines 6 - 7 we create a writer object and specify the file it will write to. On line 20 we write our example object to disk, serialized as a string.</p>
+
+<p>It is important to note that in order to read this data, the <code class="highlighter-rouge">user_review</code> field of each <code class="highlighter-rouge">Features</code> object must be the same length. This is the reason we created a <code class="highlighter-rouge">BytesList</code> of length 1 rather than splitting our sentence into multiple words in advance.</p>
+
+<p>Now we will move on to reading our data from the demo.tfrecords file we wrote.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mf">1.</span>  <span class="k">def</span> <span class="nf">parse_fn</span><span class="p">(</span><span class="n">record</span><span class="p">):</span>
+<span class="mf">2.</span>      <span class="n">features</span> <span class="o">=</span> <span class="p">{</span>
+<span class="mf">3.</span>              <span class="s">"user_review"</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenSequenceFeature</span><span class="p">([],</span> <span class="n">tf</span><span class="o">.</span><span class="n">string</span><span class="p">,</span> <span class="n">allow_missing</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+<span class="mf">4.</span>              <span class="s">"item_review"</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenSequenceFeature</span><span class="p">([],</span> <span class="n">tf</span><span class="o">.</span><span class="n">string</span><span class="p">,</span> <span class="n">allow_missing</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+<span class="mf">5.</span>              <span class="s">"rating"</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([</span><span class="mi">1</span><span class="p">],</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="mf">6.</span>          <span class="p">}</span>
+<span class="mf">7.</span>      <span class="n">parsed_features</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">parse_single_example</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">features</span><span class="p">)</span>
+<span class="mf">8.</span>      <span class="k">return</span> <span class="n">parsed_features</span><span class="p">[</span><span class="s">"user_review"</span><span class="p">],</span> <span class="n">parsed_features</span><span class="p">[</span><span class="s">"item_review"</span><span class="p">],</span> <span class="n">parsed_features</span><span class="p">[</span><span class="s">"rating"</span><span class="p">]</span>
+<span class="mf">9.</span>  
+<span class="mf">10.</span> <span class="k">def</span> <span class="nf">split_fn</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">rating</span><span class="p">):</span>
+<span class="mf">11.</span>     <span class="n">user</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">string_split</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+<span class="mf">12.</span>     <span class="n">item</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">string_split</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+<span class="mf">13.</span>     <span class="k">return</span> <span class="n">user</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">item</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">rating</span>
+<span class="mf">14.</span> 
+<span class="mf">15.</span> <span class="k">def</span> <span class="nf">truncate_fn</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">rating</span><span class="p">):</span>
+<span class="mf">16.</span>     <span class="k">return</span> <span class="n">user</span><span class="p">[:</span><span class="mi">400</span><span class="p">],</span> <span class="n">item</span><span class="p">[:</span><span class="mi">400</span><span class="p">],</span> <span class="n">rating</span>
+<span class="mf">17.</span> 
+<span class="mf">18.</span> <span class="n">dataset</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">TFRecordDataset</span><span class="p">(</span><span class="s">"data/demo.tfrecords"</span><span class="p">)</span>
+<span class="mf">19.</span> <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="nb">map</span><span class="p">(</span><span class="n">parse_fn</span><span class="p">)</span>
+<span class="mf">20.</span> <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="nb">map</span><span class="p">(</span><span class="n">split_fn</span><span class="p">)</span>
+<span class="mf">21.</span> <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="nb">map</span><span class="p">(</span><span class="n">truncate_fn</span><span class="p">)</span>
+<span class="mf">22.</span> <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">padded_batch</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">padded_shapes</span><span class="o">=</span><span class="p">([</span><span class="mi">400</span><span class="p">],</span> <span class="p">[</span><span class="mi">400</span><span class="p">],</span> <span class="p">[</span><span class="bp">None</span><span class="p">]),</span> <span class="n">padding_values</span><span class="o">=</span><span class="p">(</span><span class="s">"unk"</span><span class="p">,</span> <span class="s">"unk"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+<span class="mf">23.</span> <span class="n">iterator</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">make_one_shot_iterator</span><span class="p">()</span>
+<span class="mf">24.</span> <span class="n">data_point</span> <span class="o">=</span> <span class="n">iterator</span><span class="o">.</span><span class="n">get_next</span><span class="p">()</span>
+<span class="mf">25.</span> <span class="n">data_point</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="nb">eval</span><span class="p">(</span><span class="n">session</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">())</span>
+</code></pre></div></div>
+
+<p>This time it is best to start at the bottom. Line 18 creates a TFRecordDataset from our file. In our case there is one file, but if there were multiple files and our data did not fit in memory we could pass a list of files instead. Next on line 19 we call our <code class="highlighter-rouge">parse_fn</code> on each input value.</p>
+
+<p><code class="highlighter-rouge">parse_fn</code> calls <code class="highlighter-rouge">tf.parse_single_example</code> where each example is expected to have three fields defined as above. Note that we used tf.FixedLenSequenceFeature because we found it the simplest api to work with. For example, <code class="highlighter-rouge">user_review: tf.FixedLenSequenceFeature([], tf.string, allow_missing=True)</code> means that we expect each <code class="highlighter-rouge">user_review</code> to have one, undefined dimension and be of type <code class="highlighter-rouge">tf.string</code>, where missing values are also allowed. Note that when using the <code class="highlighter-rouge">tf.string</code> type, <code class="highlighter-rouge">allow_missing</code> was required.</p>
+
+<p>Next we call <code class="highlighter-rouge">split_fn</code> to split our Tensorflow strings into arrays of strings. Since <code class="highlighter-rouge">tf.string_split</code> returns a map of indices and values, we must return only the values from our split.</p>
+
+<p>Next we call the <code class="highlighter-rouge">truncate_fn</code> to shorten any strings longer than our predefined length to the appropriate size. For us, this was required because we eventually feed this data into a convolutional network, which takes a fixed length input.</p>
+
+<p>Finally, we create <code class="highlighter-rouge">padded_batch</code>es. The first input is the batch size, 16, then we have the shape of each element output by the previous map function, and lastly the values to pad with. Note that we had to provide a pad value for the rating even though we know it will never need to be padded.</p>
+
+<p>Lastly, we call <code class="highlighter-rouge">make_one_shot_iterator</code>, get a value, and evaluate it to confirm we can read from our dataset!</p>
+
+<p>The TFRecords api is considered the standard data input format for Tensorflow models and based on Google’s protobufs. TFRecords provide many advantages like speed and an easy way to read data too large to fit in memory. Unfortunately the api is extremely difficult to use, and we find ourselves wrapping objects in objects where sane defaults could be much easier to work with.</p>
+
+
+  </div><a class="u-url" href="/2018/04/25/working-with-tfrecords.html" hidden></a>
+</article>
+
+      </div>
+    </main>
+<footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">D-SALT</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">D-SALT</li>
+            <li><a class="u-email" href="mailto:as5281@columbia.edu">as5281@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:kvm2116@columbia.edu">kvm2116@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:pck2119@columbia.edu">pck2119@columbia.edu</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/aistein"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">aistein</span></a></li>
+</ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>D-SALT: Datacenter Sender Adaptive Low-Latency Transport</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

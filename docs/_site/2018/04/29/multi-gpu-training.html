@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>Multi Gpu Training | D-SALT</title>
+<meta name="generator" content="Jekyll v3.8.5" />
+<meta property="og:title" content="Multi Gpu Training" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Two gpus &gt; One gpu?" />
+<meta property="og:description" content="Two gpus &gt; One gpu?" />
+<link rel="canonical" href="http://localhost:4000/2018/04/29/multi-gpu-training.html" />
+<meta property="og:url" content="http://localhost:4000/2018/04/29/multi-gpu-training.html" />
+<meta property="og:site_name" content="D-SALT" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-04-29T00:00:00-04:00" />
+<script type="application/ld+json">
+{"description":"Two gpus &gt; One gpu?","@type":"BlogPosting","url":"http://localhost:4000/2018/04/29/multi-gpu-training.html","headline":"Multi Gpu Training","dateModified":"2018-04-29T00:00:00-04:00","datePublished":"2018-04-29T00:00:00-04:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2018/04/29/multi-gpu-training.html"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="D-SALT" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">D-SALT</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Multi Gpu Training</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2018-04-29T00:00:00-04:00" itemprop="datePublished">Apr 29, 2018
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h2 id="taking-advantage-of-graph-structure">Taking Advantage of Graph Structure</h2>
+<p>After seeing the performance improvements of using GPUs to train a model we want to see if we could take advantage of our computational graph structure to use multiple GPUs and parallelize computation. In our particular case the computational graph has two tower-like structures, a convolution, activation, fully connected layer, and activation, over a set of user reviews, and a mirroring convolution over a set of item reviews.
+<img src="/dlprof/assets/parallel-tower-structure.png" alt="parallel towers" /></p>
+
+<p>It seems like a model with such structure could easily be parallelized by placing the two tower operations on different gpus.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">u_inputs</span> <span class="o">=</span> <span class="n">features</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">u_inputs</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">u_inputs</span><span class="p">)</span>
+    <span class="n">u_inputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">embedding_lookup</span><span class="p">(</span><span class="n">word_embeddings</span><span class="p">,</span> <span class="n">u_inputs</span><span class="p">)</span>
+    <span class="n">user_conv1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">conv1d</span><span class="p">(</span>
+        <span class="n">u_inputs</span><span class="p">,</span>
+        <span class="n">filters</span><span class="p">,</span>
+        <span class="n">kernel_size</span><span class="p">,</span>
+        <span class="n">use_bias</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+        <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">tanh</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s">"user_conv"</span><span class="p">)</span>
+    <span class="n">user_max_pool1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">max_pooling1d</span><span class="p">(</span><span class="n">user_conv1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">user_flat</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">user_max_pool1</span><span class="p">)</span>
+    <span class="n">user_dense</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">user_flat</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">i_inputs</span> <span class="o">=</span> <span class="n">features</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">i_inputs</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">i_inputs</span><span class="p">)</span>
+    <span class="n">i_inputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">embedding_lookup</span><span class="p">(</span><span class="n">word_embeddings</span><span class="p">,</span> <span class="n">i_inputs</span><span class="p">)</span>
+    <span class="n">item_conv1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">conv1d</span><span class="p">(</span>
+        <span class="n">i_inputs</span><span class="p">,</span>
+        <span class="n">filters</span><span class="p">,</span>
+        <span class="n">kernel_size</span><span class="p">,</span>
+        <span class="n">use_bias</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+        <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">tanh</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s">"item_conv"</span><span class="p">)</span>
+    <span class="n">item_max_pool1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">max_pooling1d</span><span class="p">(</span><span class="n">item_conv1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">item_flat</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">item_max_pool1</span><span class="p">)</span>
+    <span class="n">item_dense</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">item_flat</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>In the code above we used Tensorflow’s <code class="highlighter-rouge">with tf.device(...)</code> feature to place our tower operations on different devices. Below we present the average runtime per epoch over five epochs for single-gpu and dual-gpu training.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Device Placement</th>
+      <th>Average Seconds/epoch Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Single GPU</td>
+      <td>20.455 s</td>
+    </tr>
+    <tr>
+      <td>Dual GPU</td>
+      <td>22.500 s</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>We can see above that our model actually took MORE time to train on average when we trained on GPU. This effect is actually common in the deep learning community because GPUs have been optimized so heavily for matrix computations that the time it takes to transfer data between devices slows down processing. We can confirm that this is the actual reason our model slows down by making the model alternate between devices for each operation and see if it slows down further.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">u_inputs</span> <span class="o">=</span> <span class="n">features</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">u_inputs</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">u_inputs</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">u_inputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">embedding_lookup</span><span class="p">(</span><span class="n">word_embeddings</span><span class="p">,</span> <span class="n">u_inputs</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">user_conv1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">conv1d</span><span class="p">(</span>
+        <span class="n">u_inputs</span><span class="p">,</span>
+        <span class="n">filters</span><span class="p">,</span>
+        <span class="n">kernel_size</span><span class="p">,</span>
+        <span class="n">use_bias</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+        <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">tanh</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s">"user_conv"</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">user_max_pool1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">max_pooling1d</span><span class="p">(</span><span class="n">user_conv1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">user_flat</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">user_max_pool1</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">user_dense</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">user_flat</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">i_inputs</span> <span class="o">=</span> <span class="n">features</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">i_inputs</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">i_inputs</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">i_inputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">embedding_lookup</span><span class="p">(</span><span class="n">word_embeddings</span><span class="p">,</span> <span class="n">i_inputs</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">item_conv1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">conv1d</span><span class="p">(</span>
+        <span class="n">i_inputs</span><span class="p">,</span>
+        <span class="n">filters</span><span class="p">,</span>
+        <span class="n">kernel_size</span><span class="p">,</span>
+        <span class="n">use_bias</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+        <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">tanh</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s">"item_conv"</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">item_max_pool1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">max_pooling1d</span><span class="p">(</span><span class="n">item_conv1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:0"</span><span class="p">):</span>
+    <span class="n">item_flat</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">item_max_pool1</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s">"/gpu:1"</span><span class="p">):</span>
+    <span class="n">item_dense</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">dense</span><span class="p">(</span><span class="n">item_flat</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">)</span>
+</code></pre></div></div>
+<p>With this exaggerated device placement we now have an average runtime of 23.021 seconds per epoch, confirming our suspicions! What if we would like more information and to find out exactly how much time is spent transfering data? Lets now take a look at the nvidia gpu profiling tools and see if we can narrow down the time spent transfering.</p>
+
+<p>To run the nvidia gpu profiler simply run the command</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>nvprof python <span class="s2">"DeepCoNN - dual gpu lots of device transfers.py"</span> &amp;&gt; nvidia.txt
+</code></pre></div></div>
+
+<p>This will create a file <code class="highlighter-rouge">nvidia.txt</code> containing a summary of GPU operations. After running for our “parallelized towers” model and “exaggerated device placement” we found the following important difference. Below we present the single most costly GPU function call for each of our tested models.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Time(%) Time         Calls  Avg       Min       Max       Name
+# exaggerated device placement
+24.53%  13.0696s     94774  137.90us  4.3190us  994.70us  [CUDA memcpy PtoP]
+# reasonable device placement
+20.08%  10.0978s     78292  128.98us  4.3190us  893.33us  [CUDA memcpy PtoP]
+# single device placement
+17.54%  6.92109s      4120  1.6799ms  290.78us  2.7316ms  void tensorflow::UnsortedSegmentCustomKernel...
+</code></pre></div></div>
+
+<p>As we can see, the exagerated device placement is causing our model to spend nearly 5% more peer-to-peer data copies, resulting in 3 extra seconds spent simply copying data. On the other hand, when we use a single GPU the majority of time is spent on a tensorflow kernel operation, as expected in a model who’s primary operation is a convolution. This shows that for some models, and I would venture to say most models that fit in single-GPU memory, training times are fastest when training on one GPU.</p>
+
+  </div><a class="u-url" href="/2018/04/29/multi-gpu-training.html" hidden></a>
+</article>
+
+      </div>
+    </main>
+<footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">D-SALT</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">D-SALT</li>
+            <li><a class="u-email" href="mailto:as5281@columbia.edu">as5281@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:kvm2116@columbia.edu">kvm2116@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:pck2119@columbia.edu">pck2119@columbia.edu</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/aistein"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">aistein</span></a></li>
+</ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>D-SALT: Datacenter Sender Adaptive Low-Latency Transport</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

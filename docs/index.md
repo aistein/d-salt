@@ -3,5 +3,5 @@
 # To modify the layout, see https://jekyllrb.com/docs/themes/#overriding-theme-defaults
 
 layout: home
-list_title: GPU Profiling For Tensorflow Performance
+list_title: D-SALT - Datacenter Sender Adaptive Low-Latency Transport
 ---

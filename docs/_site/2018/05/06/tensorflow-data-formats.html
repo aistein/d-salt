@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>Tensorflow Data Formats | D-SALT</title>
+<meta name="generator" content="Jekyll v3.8.5" />
+<meta property="og:title" content="Tensorflow Data Formats" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Tensorflow claims that when using nvidia gpus, the data format NCHW is more performant than NHWC for convolutional networks. We use the Tensorflow profiler to show this is the case." />
+<meta property="og:description" content="Tensorflow claims that when using nvidia gpus, the data format NCHW is more performant than NHWC for convolutional networks. We use the Tensorflow profiler to show this is the case." />
+<link rel="canonical" href="http://localhost:4000/2018/05/06/tensorflow-data-formats.html" />
+<meta property="og:url" content="http://localhost:4000/2018/05/06/tensorflow-data-formats.html" />
+<meta property="og:site_name" content="D-SALT" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-05-06T00:00:00-04:00" />
+<script type="application/ld+json">
+{"description":"Tensorflow claims that when using nvidia gpus, the data format NCHW is more performant than NHWC for convolutional networks. We use the Tensorflow profiler to show this is the case.","@type":"BlogPosting","url":"http://localhost:4000/2018/05/06/tensorflow-data-formats.html","headline":"Tensorflow Data Formats","dateModified":"2018-05-06T00:00:00-04:00","datePublished":"2018-05-06T00:00:00-04:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2018/05/06/tensorflow-data-formats.html"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="D-SALT" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">D-SALT</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Tensorflow Data Formats</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2018-05-06T00:00:00-04:00" itemprop="datePublished">May 6, 2018
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h2 id="data-formats">Data Formats</h2>
+
+<p>One of the proposed optimizations according to Tensorflow is the choice of data format NCHW when using Nvidia GPUs. Here we will demonstrate and explain why.</p>
+
+<p>To begin, we need to understand just what the acronym NCHW is. Specifically, in the context of convolutional networks and max pooling layers, NCHW is an acronym for the dimensions of the data being represented.</p>
+
+<ol>
+  <li>N - number of items in the batch</li>
+  <li>C - number of channels</li>
+  <li>H - height of the matrix in each channel</li>
+  <li>W - width of the matrix in each channel</li>
+</ol>
+
+<p>So, clearly, if we use NCHW format and have input dimensions <code class="highlighter-rouge">(32, 3, 28, 28)</code>, our data has a batch size of 32 and 3 input channels each of which is a 28 x 28 dimension matrix.</p>
+
+<p>The alternative is NHWC, also known as <code class="highlighter-rouge">channels_last</code> in some documentation, whihc simply places the channel dimension at the last value.</p>
+
+<h2 id="tensorflow-data-formats">Tensorflow Data Formats</h2>
+
+<p>Tensorflow has an unfortunate history with data formats. Originally, Tensorflow was only compatible with NHWC because it was slightly faster on CPUs. As we will explain, Tensorflow later introduced support for NCHW as Nvidia was able to optimize computations for this format.</p>
+
+<h2 id="experiments">Experiments</h2>
+
+<p>In order to conduct experiments we needed two things</p>
+
+<ol>
+  <li>A model that uses 2D convolutions</li>
+  <li>A way to measure the running time of convolutions independent of other operations</li>
+</ol>
+
+<p>Satisfying (1) was much simpler than satisfying (2), but both required that we clone the tensorflow repository.</p>
+
+<h3 id="a-model">A model</h3>
+
+<p>Within the Tensorflow repository, under the <code class="highlighter-rouge">tensorflow/tensorflow/examples/tutorials/mnist/</code> directory is a project <code class="highlighter-rouge">mnist_deep.py</code>. We used this as the base to our model because it involves 2 layers which both use 2D convolutions along with max pooling. In order to easily run our model with either data format, we simply added an argument <code class="highlighter-rouge">data_format</code> to specify, then built our computational graph accordingly.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>python mnist_deep.py <span class="nt">--data_format</span> NCHW
+</code></pre></div></div>
+
+<h3 id="measuring-performance">Measuring Performance</h3>
+
+<p>In order to confirm that any improvement in performance is actually due to an improvement in convolutional computation speed, we needed to set up Tensorflow’s profiling tool <code class="highlighter-rouge">tfprof</code>.</p>
+
+<p>For this particular case, it was a fairly painless experience, but I expect that to be the exception and not the rule. We simply had to cd into the directory in the Tensorflow repo, <code class="highlighter-rouge">tensorflow/tensorflow/core/profiler/</code> and run one command.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>bazel build <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>The entire build process took approximately 40 minutes, but also included several other Tensorflow tools (which makes me think cd-ing into the directory is not necessary).</p>
+
+<p>Once the build was complete we had a file linked to an executable in the root directory of our project under <code class="highlighter-rouge">bazel-bin/tensorflow/core/profiler/profiler</code>.</p>
+
+<p>Now that the profiler command line tool was installed we needed the model to generate profiles that could be parsed. This was another very easy addition into the original model.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">tfprof</span><span class="o">.</span><span class="n">ProfileContext</span><span class="p">(</span><span class="n">profile_dir</span><span class="p">)</span> <span class="k">as</span> <span class="n">pctx</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">sess</span><span class="p">:</span>
+      <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">())</span>
+      <span class="c"># profiler = tf.profiler.Profiler(sess.graph)</span>
+      <span class="c"># time_per_epoch = []</span>
+      <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2000</span><span class="p">):</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">mnist</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">next_batch</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span>
+        <span class="o">...</span>
+</code></pre></div></div>
+
+<p>The only line we needed to add was <code class="highlighter-rouge">with tf.contrib.tfprof.ProfileContext(...) as pctx</code>. After adding this line, Tensorflow’s profiler will randomly sample steps of your training loop and dump the resulting profile to the specified directory.</p>
+
+<h2 id="results">Results</h2>
+
+<p>As stated in the Tensorflow performance guide, our convolutional operations performed better using the NCHW format than with the NHWC format. The output from the profiler after 2000 iterations was as follows</p>
+
+<h3 id="nchw">NCHW</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Profile:
+node name                      | requested bytes               | total execution <span class="nb">time</span>          | accelerator execution <span class="nb">time</span>      | cpu execution <span class="nb">time</span>        | op occurrence <span class="o">(</span>run|defined<span class="o">)</span>
+...
+Conv2DBackpropFilter           89.20MB <span class="o">(</span>95.93%, 26.08%<span class="o">)</span>,        1.64ms <span class="o">(</span>67.76%, 14.83%<span class="o">)</span>,        1.42ms <span class="o">(</span>63.40%, 17.18%<span class="o">)</span>,          219us <span class="o">(</span>80.78%, 7.91%<span class="o">)</span>,        2|2
+Conv2D                         93.78MB <span class="o">(</span>69.84%, 27.42%<span class="o">)</span>,        1.50ms <span class="o">(</span>52.94%, 13.56%<span class="o">)</span>,        1.22ms <span class="o">(</span>46.22%, 14.79%<span class="o">)</span>,          275us <span class="o">(</span>72.87%, 9.93%<span class="o">)</span>,        2|2
+Conv2DBackpropInput            95.94MB <span class="o">(</span>42.42%, 28.05%<span class="o">)</span>,        1.16ms <span class="o">(</span>39.37%, 10.44%<span class="o">)</span>,        1.03ms <span class="o">(</span>31.43%, 12.39%<span class="o">)</span>,          129us <span class="o">(</span>62.93%, 4.66%<span class="o">)</span>,        1|2
+...
+MaxPoolGrad                      7.53MB <span class="o">(</span>14.36%, 2.20%<span class="o">)</span>,          383us <span class="o">(</span>20.57%, 3.46%<span class="o">)</span>,          303us <span class="o">(</span>11.71%, 3.66%<span class="o">)</span>,           79us <span class="o">(</span>47.00%, 2.85%<span class="o">)</span>,        2|2
+MaxPool                          1.88MB <span class="o">(</span>12.16%, 0.55%<span class="o">)</span>,          199us <span class="o">(</span>12.56%, 1.80%<span class="o">)</span>,           123us <span class="o">(</span>4.83%, 1.49%<span class="o">)</span>,           75us <span class="o">(</span>35.59%, 2.71%<span class="o">)</span>,        2|2
+...
+</code></pre></div></div>
+
+<h3 id="nhwc">NHWC</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Profile:
+node name                     | requested bytes                | total execution <span class="nb">time</span>          | accelerator execution <span class="nb">time</span>      | cpu execution <span class="nb">time</span>        | op occurrence <span class="o">(</span>run|defined<span class="o">)</span>
+...
+Conv2DBackpropFilter          116.99MB <span class="o">(</span>96.64%, 28.23%<span class="o">)</span>,        1.89ms <span class="o">(</span>84.00%, 15.71%<span class="o">)</span>,        1.61ms <span class="o">(</span>80.68%, 18.02%<span class="o">)</span>,          278us <span class="o">(</span>93.60%, 9.08%<span class="o">)</span>,        2|2
+Conv2D                         95.23MB <span class="o">(</span>68.41%, 22.98%<span class="o">)</span>,        1.75ms <span class="o">(</span>68.29%, 14.55%<span class="o">)</span>,        1.42ms <span class="o">(</span>62.67%, 15.85%<span class="o">)</span>,         332us <span class="o">(</span>84.52%, 10.84%<span class="o">)</span>,        2|2
+Conv2DBackpropInput           100.96MB <span class="o">(</span>45.42%, 24.36%<span class="o">)</span>,        1.27ms <span class="o">(</span>39.94%, 10.59%<span class="o">)</span>,        1.11ms <span class="o">(</span>32.22%, 12.49%<span class="o">)</span>,          156us <span class="o">(</span>62.19%, 5.09%<span class="o">)</span>,        1|2
+MaxPoolGrad                    45.64MB <span class="o">(</span>21.06%, 11.01%<span class="o">)</span>,          906us <span class="o">(</span>29.35%, 7.54%<span class="o">)</span>,          719us <span class="o">(</span>19.73%, 8.05%<span class="o">)</span>,          186us <span class="o">(</span>57.10%, 6.07%<span class="o">)</span>,        2|2
+...
+MaxPool                          1.88MB <span class="o">(</span>10.04%, 0.45%<span class="o">)</span>,          237us <span class="o">(</span>12.17%, 1.97%<span class="o">)</span>,           180us <span class="o">(</span>5.12%, 2.02%<span class="o">)</span>,           56us <span class="o">(</span>32.68%, 1.83%<span class="o">)</span>,        2|2
+...
+</code></pre></div></div>
+
+<p>As we can see from the <code class="highlighter-rouge">total execution time</code> column every operation related to convolutions, includeing max pooling, performed better. It is important to note that these results were consistent, but we are only displaying the result of one profile over relatively few iterations. Any larger model like those used in modern object recognition or segmentation problems would have much more tangible improvements.</p>
+
+<h2 id="explanation">Explanation</h2>
+
+<p>So the question remains, what is happening under the hood that makes Nvidia GPUs run convolutions faster in one format than in another?</p>
+
+<p>As we know, Nvidia’s cuDNN library is written using the CUDA platform, allowing users to write in languages like c/c++. Because these languages access data in a row-major fashion, they can simply slice the NCHW tensor on <code class="highlighter-rouge">(1, 2)</code> to get the first image’s second channel. If the data were instead formatted as NHWC they would have to slice along some axis like <code class="highlighter-rouge">(1, :, :, 2)</code> to get the same data. This leads to a slight increase in complexity when operating on NHWC data.</p>
+
+<p>According to the Tensorflow team running convolutions on CPUs is slightly more performant when the data is NHWC format. Additionally, this problem could be a hold-over from other languages like Matlab, which access matrices in a column-major fashion. In those languages, the performance in accessing data is the opposite.</p>
+
+<p>Unfortunately NHWC is still the default data format for Tensorflow, and we found that the NCHW format threw exceptions for some operations when run on CPU (<code class="highlighter-rouge">max_pooling</code>)</p>
+
+  </div><a class="u-url" href="/2018/05/06/tensorflow-data-formats.html" hidden></a>
+</article>
+
+      </div>
+    </main>
+<footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">D-SALT</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">D-SALT</li>
+            <li><a class="u-email" href="mailto:as5281@columbia.edu">as5281@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:kvm2116@columbia.edu">kvm2116@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:pck2119@columbia.edu">pck2119@columbia.edu</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/aistein"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">aistein</span></a></li>
+</ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>D-SALT: Datacenter Sender Adaptive Low-Latency Transport</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

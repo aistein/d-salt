@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>Compiler Optimizations | D-SALT</title>
+<meta name="generator" content="Jekyll v3.8.5" />
+<meta property="og:title" content="Compiler Optimizations" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="the uncertain and treacherous path of building tensorflow from scratch" />
+<meta property="og:description" content="the uncertain and treacherous path of building tensorflow from scratch" />
+<link rel="canonical" href="http://localhost:4000/2018/05/04/compiler-optimizations.html" />
+<meta property="og:url" content="http://localhost:4000/2018/05/04/compiler-optimizations.html" />
+<meta property="og:site_name" content="D-SALT" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-05-04T00:00:00-04:00" />
+<script type="application/ld+json">
+{"description":"the uncertain and treacherous path of building tensorflow from scratch","@type":"BlogPosting","url":"http://localhost:4000/2018/05/04/compiler-optimizations.html","headline":"Compiler Optimizations","dateModified":"2018-05-04T00:00:00-04:00","datePublished":"2018-05-04T00:00:00-04:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2018/05/04/compiler-optimizations.html"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="D-SALT" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">D-SALT</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Compiler Optimizations</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2018-05-04T00:00:00-04:00" itemprop="datePublished">May 4, 2018
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h2 id="tensorflow-compiler-optimizations">Tensorflow Compiler Optimizations</h2>
+
+<hr />
+<p><em>Difficulty: Intermediate</em></p>
+
+<hr />
+<p>The Tensorflow team’s prime objective is to spread the use of its framework over as broad an audience as possible.  There are many classes of users who wish to take advantage of deep learning, from students to researchers to professional engineering teams.  It makes sense that by default Tensorflow has a standard set of configurations because not every use-case requires optimization.  However, the advanced users will be interested in fine-tuning the software to meet their needs.  Unfortunately, the instructions provided by Tensorflow towards this end are rather sparse.</p>
+
+<h2 id="overview">Overview</h2>
+<p>In this tutorial - which we have adapted from a fabulous series of <a href="https://www.pugetsystems.com/labs/hpc/Build-TensorFlow-CPU-with-MKL-and-Anaconda-Python-3-6-using-a-Docker-Container-1133/">posts</a> by Dr. Donald Kinghorn at Puget Systems - we will walk through compiling Tensorflow from scratch three times: (1) Using the Intel MKL CPU optimizations; (2) Enabling the accelerated linear algebra (XLA) framework; (3) Combining these optimizations with GPU capability.  We will be using Docker containers to insulate our systems from the mess of compilation.  The result in each case will be a .whl file which can be pip-installed and tested inside of that Docker container.  Should you be happy with the results, you can then take the .whl file and install it the same way on your host system!</p>
+
+<h3 id="baseline-compiling-tf-for-cpu-with-no-optimizations">Baseline: Compiling TF for CPU with No Optimizations</h3>
+<p>In order to extract meaningful results from this exercise, we must be able to show the difference in performance between builds.  Despite the fact we aren’t adding any special compile switches here, it is still important for us to do this build with “docker isolation” because we must be careful not to cross-contaminate libraries between tensorflow installations.  We tried to test outside of docker initially and found that all tests yeilded the same results because anaconda was cacheing tensorflow libraries for reuse between different conda environments!  Here instead we do the build and test in the safe confines of a Docker container.</p>
+
+<p>Before you begin, please <a href="https://www.pugetsystems.com/labs/hpc/How-To-Setup-NVIDIA-Docker-and-NGC-Registry-on-your-Workstation---Part-1-Introduction-and-Base-System-Setup-1095/">install and configure Docker</a>. These instructions are copied from Dr. Kinghorn’s post mentioned above, reformatted here for convenience.</p>
+
+<ol>
+  <li>Make a directory to do your build
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>mkdir TF-build
+<span class="nv">$ </span><span class="nb">cd </span>TF-build
+</code></pre></div>    </div>
+  </li>
+  <li>Download tensorflow source code and checkout version 1.7
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>git clone https://github.com/tensorflow/tensorflow
+<span class="nv">$ </span><span class="nb">cd </span>tensorflow/
+<span class="nv">$ </span>git checkout r1.7
+</code></pre></div>    </div>
+  </li>
+  <li>Setup docker container build directory
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>mkdir dockerfile
+<span class="nv">$ </span><span class="nb">cd </span>dockerfile
+</code></pre></div>    </div>
+  </li>
+  <li>Supply the necessary dependency files/hosts for Anaconda and Bazel. Note that if you are using another system aside from x86-linux you will need to acquire the appropriate anaconda file.
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>wget https://repo.anaconda.com/archive/Anaconda3-5.1.0-Linux-x86_64.sh
+<span class="nv">$ </span><span class="nb">echo</span> <span class="s2">"deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8"</span> <span class="o">&gt;</span> bazel.list
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Create the Dockerfile. Save the following as “Dockerfile”, with a capital D!</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c"># Dockerfile to setup a build environment for TensorFlow</span>
+ <span class="c"># using Intel MKL and Anaconda3 Python</span>
+    
+ FROM ubuntu:16.04
+    
+ <span class="c"># Add a few needed packages to the base Ubuntu 16.04</span>
+ <span class="c"># Dr. Kinghorn prefers emacs-nox, We prefer vim-nox</span>
+ RUN <span class="se">\</span>
+     apt-get update <span class="o">&amp;&amp;</span> apt-get install <span class="nt">-y</span> <span class="se">\</span>
+     build-essential <span class="se">\</span>
+     curl <span class="se">\</span>
+     vim-nox <span class="se">\</span>
+     git <span class="se">\</span>
+     openjdk-8-jdk <span class="se">\</span>
+     <span class="o">&amp;&amp;</span> rm <span class="nt">-rf</span> /var/lib/lists/<span class="k">*</span>
+    
+ <span class="c"># Add the repo for bazel and install it.</span>
+ <span class="c"># I just put it in a file bazel.list and coped in the file</span>
+ <span class="c"># containing the following line</span>
+ <span class="c"># deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8</span>
+ COPY bazel.list /etc/apt/sources.list.d/
+ RUN <span class="se">\</span>
+   curl https://bazel.build/bazel-release.pub.gpg | apt-key add - <span class="o">&amp;&amp;</span> <span class="se">\</span>
+   apt-get update <span class="o">&amp;&amp;</span> apt-get install <span class="nt">-y</span> bazel
+    
+ <span class="c"># Copy in and install Anaconda3 from the shell archive</span>
+ <span class="c"># Anaconda3-5.1.0-Linux-x86_64.sh</span>
+ COPY Anaconda3<span class="k">*</span> /root/
+ RUN <span class="se">\</span>
+   <span class="nb">cd</span> /root<span class="p">;</span> chmod 755 Anaconda3<span class="k">*</span>.sh <span class="o">&amp;&amp;</span> <span class="se">\</span>
+   ./Anaconda3<span class="k">*</span>.sh <span class="nt">-b</span> <span class="o">&amp;&amp;</span> <span class="se">\</span>
+   <span class="nb">echo</span> <span class="s1">'export PATH="$HOME/anaconda3/bin:$PATH"'</span> <span class="o">&gt;&gt;</span> .bashrc <span class="o">&amp;&amp;</span> <span class="se">\</span>
+   rm <span class="nt">-f</span> Anaconda3<span class="k">*</span>.sh
+    
+ <span class="c"># That's it! That should be enough to do a TensorFlow 1.7 CPU build</span>
+ <span class="c"># using Anaconda Python 3.6 Intel MKL with gcc 5.4</span>
+</code></pre></div>    </div>
+  </li>
+  <li>Create the Docker container and run it. Note you will have to set the environmental variable PROJECT yourself to the proper path to your working directory. <strong>Note:</strong> you must always be in the <em>dockerfile</em> directory to use the local configurations file.
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker build <span class="nt">-t</span> tf-build-1.7-cpu-mkl-only <span class="nb">.</span>
+<span class="nv">$ </span>docker run <span class="nt">--rm</span> <span class="nt">-it</span> <span class="nt">-v</span> <span class="nv">$PROJECT</span>/TF-build:/root/TF-build tf-build-1.7-cpu-mkl-only
+</code></pre></div>    </div>
+    <ul>
+      <li>A quick aside about Docker and the command line arguments here, because they are interesting.  If we consider a “virtual machine” as abstracting the <em>hardware</em> so that any <em>operating system</em> may run upon it, we can similarly consider a “container” as abstracting the <em>operating system</em> so that any <em>application</em> may run upon it. As such, the most common use-cases for containers do not require much if any interaction with the container via command line, usually only through whatever interface is provided by the application.  In the case of this tutorial, however, we are using Docker more like a virtual machine than a a container.  We’ll be using the command line to interact with it, just like we would in a VM. The difference here is that a container is much lighter-weight (and much less capable).  It will build and be ready for use in minutes, and there’s no downloading multi-gigabyte .iso files necessary.  Once we are done doing the build, we’ll blow it away.  Note the significance of the command line options for <code class="highlighter-rouge">docker run</code> used (<a href="https://docs.docker.com/engine/reference/commandline/run/#options">documentation here</a>):</li>
+    </ul>
+    <ul>
+      <li><code class="highlighter-rouge">--rm</code> will delete the container from our system once we exit the instance</li>
+      <li><code class="highlighter-rouge">-i</code> keep stdin open so that the container may receive our input</li>
+      <li><code class="highlighter-rouge">-t</code> allocates a pseudo-TTY (text-only console)</li>
+      <li><code class="highlighter-rouge">-v</code> mount the <em>volume</em> (folder containing tensorflow source-code) at a specific point inside the container</li>
+    </ul>
+  </li>
+  <li>Configure Tensorflow. You should now be greeted with a custom CLI prompt, which indicates that we are running inside the container.
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> <span class="nb">cd </span>root/TF-build/tensorflow
+<span class="o">&gt;</span> ./configure
+</code></pre></div>    </div>
+    <ul>
+      <li>Say yes to “jemalloc support”, and no to every other prompt (including CUDA support, as we are not yet demonstrating GPU).</li>
+    </ul>
+  </li>
+  <li>Build Tensorflow. <strong>Warning:</strong> This can take quite some time, on the order of 30 minutes in the case of our GCP instance.
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> bazel build //tensorflow/tools/pip_package:build_pip_package
+</code></pre></div>    </div>
+  </li>
+  <li>Create the pip package
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> bazel-bin/tensorflow/tools/pip_package/build_pip_package ../tensorflow_pkg
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p>We test this base installation in a new conda environment within the docker container:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> conda create <span class="nt">--name</span> tf-cpu-base
+<span class="o">&gt;</span> <span class="nb">source </span>activate tf-cpu-base
+<span class="o">&gt;</span> pip install tensorflow_pkg/tensorflow-1.7.1-cp36-cp36m-linux_x86_64.whl
+</code></pre></div></div>
+<p>A quick test of matrix multiplication will elucidate our motivation for the undertaking ahead.  Running the following python script</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="n">tf</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="n">tf</span><span class="o">.</span><span class="n">set_random_seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">A</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">random_normal</span><span class="p">([</span><span class="mi">10000</span><span class="p">,</span><span class="mi">10000</span><span class="p">])</span>
+<span class="n">B</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">random_normal</span><span class="p">([</span><span class="mi">10000</span><span class="p">,</span><span class="mi">10000</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">checkMM</span><span class="p">():</span>
+     <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+     <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">sess</span><span class="p">:</span>
+             <span class="k">print</span><span class="p">(</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A</span><span class="p">,</span><span class="n">B</span><span class="p">)</span> <span class="p">)</span> <span class="p">)</span> <span class="p">)</span>
+     <span class="k">print</span><span class="p">(</span><span class="s">" took {} seconds"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">))</span>
+<span class="n">checkMM</span><span class="p">()</span>
+</code></pre></div></div>
+<p>produces the following results:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2018-05-04 16:51:19.722377: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: SSE4.1 SSE4.2 AVX AVX2 FMA
+<span class="nt">-873849</span>.9
+ took 22.90920376777649 seconds
+</code></pre></div></div>
+
+<p>A more in depth performance comparison is the subject of a later section in this post, but let us briefly inspect the output.  The given information states that we have certain capabilities on our CPU which are not being utilized by our Tensorflow build: SSE4.1 SSE4.2 AVX AVX2 FMA.  What are they?</p>
+<ul>
+  <li><strong>SSE4 Instructions:</strong> “Streaming SIMD Extensions 4”. These are assembly instructions for Intel and AMD processors which allow for “packed” read/writes, string comparisons, and integer operations.</li>
+  <li><strong>AVX Instructions:</strong> “Adanced Vector Extensions” allow Intel and AMD processors to do mathematical operations and memory manipulations on up to 256 bits of input data at a time.</li>
+  <li><strong>FMA Instrucions:</strong> “Fused-Multiply Accumulate” instructuions are exactly as the name implies: In a single basic computational step, Intel and AMD processors with these extensions can - for example - take 3 inputs a,b,c and produce a = a*c + b.
+It is clear that having these instruction sets enabled in our Tensorflow build would improve the performance of any program that could benefit from SIMD (single-instruction multiple-data), and matrix multiplication is exactly one such application!</li>
+</ul>
+
+<p>Now you may be thinking “though these instructions can help with SIMD on the CPU, why should we even bother? Afterall, isn’t SIMD exactly what GPGPU is for?!”  That is a very good question without a straightforward answer, and its discussion is certainly beyond the scope of this post.  For a thorough understanding of the complexities of this question, check out this (somewhat outdated) white-paper by Intel, <a href="http://sbel.wisc.edu/Courses/ME964/Literature/LeeDebunkGPU2010.pdf">“Debunking the 100x GPU vs. CPU Myth”</a>.</p>
+
+<h3 id="optimization-1-compiling-with-intel-mkl-libraries">Optimization 1: Compiling with Intel MKL Libraries</h3>
+<p>In order to enable Tensorflow to use SSE4, AVX, and FMA instructions, we must compile it from the source code with the special siwtch <code class="highlighter-rouge">--config=mkl</code>. The steps to do this are exactly the same above, but replacing step 8 with the following:</p>
+
+<ol>
+  <li>Build Tensorflow. <strong>Warning:</strong> This can take quite some time, on the order of 30 minutes in the case of our GCP instance.
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> bazel build <span class="nt">--config</span><span class="o">=</span>opt <span class="nt">--config</span><span class="o">=</span>mkl //tensorflow/tools/pip_package:build_pip_package
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p>That’s it! Now it is time to see what kind of performance we gained from the scratch compilation.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> python testMM.py
+</code></pre></div></div>
+<p>Here is the output we got:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">-873847</span>.3
+ took 9.988160133361816 seconds
+</code></pre></div></div>
+
+<p>Fantastic! The warning about SSE4, AVX, and FMA capabilities has disappeared, and our matrix multiplication took less than half the original time!  For a better understanding of what changed, we built some profiles. Upon deploying the native python profiler, via <code class="highlighter-rouge">python -m cProfile -s cumtime mm_test.py &amp;&gt; profile.txt</code> we found the profiles very hard to interpret.  As such, we decided to use the native tensorflow chrome-trace to get more insight:</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="n">tf</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">tensorflow.python.client</span> <span class="kn">import</span> <span class="n">timeline</span>
+
+<span class="n">tf</span><span class="o">.</span><span class="n">set_random_seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">A</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">random_normal</span><span class="p">([</span><span class="mi">10000</span><span class="p">,</span><span class="mi">10000</span><span class="p">])</span>
+<span class="n">B</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">random_normal</span><span class="p">([</span><span class="mi">10000</span><span class="p">,</span><span class="mi">10000</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">checkMM</span><span class="p">():</span>
+        <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">sess</span><span class="p">:</span>
+                <span class="c"># options to trace execution</span>
+                <span class="n">options</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">RunOptions</span><span class="p">(</span><span class="n">trace_level</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">RunOptions</span><span class="o">.</span><span class="n">FULL_TRACE</span><span class="p">)</span>
+                <span class="n">run_metadata</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">RunMetadata</span><span class="p">()</span>
+
+                <span class="k">print</span><span class="p">(</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A</span><span class="p">,</span><span class="n">B</span><span class="p">)</span> <span class="p">),</span>\
+                                 <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>\
+                                 <span class="n">run_metadata</span><span class="o">=</span><span class="n">run_metadata</span> <span class="p">)</span> <span class="p">)</span>
+
+                <span class="c"># create timeline object and write to json</span>
+                <span class="n">fetched_timeline</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">Timeline</span><span class="p">(</span><span class="n">run_metadata</span><span class="o">.</span><span class="n">step_stats</span><span class="p">)</span>
+                <span class="n">chrome_trace</span> <span class="o">=</span> <span class="n">fetched_timeline</span><span class="o">.</span><span class="n">generate_chrome_trace_format</span><span class="p">()</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">'timeline.json'</span><span class="p">,</span> <span class="s">'w'</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chrome_trace</span><span class="p">)</span>
+
+        <span class="k">print</span><span class="p">(</span><span class="s">" took {} seconds"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">))</span>
+<span class="n">checkMM</span><span class="p">()</span>
+</code></pre></div></div>
+<p>In your Google Chrome browser, you can view the output file <code class="highlighter-rouge">timeline.json</code> by navigating to <code class="highlighter-rouge">chrome://tracing</code> and then loading the json file.</p>
+
+<p>Base-Trace:
+<img src="/dlprof/assets/base-trace.png" alt="base trace" /></p>
+
+<p>MKL-Trace:
+<img src="/dlprof/assets/mkl-trace.png" alt="mkl trace" /></p>
+
+<h4 id="installation-on-the-host-system">Installation on the Host System</h4>
+<p>If you’re happy with the results, then install this tensorflow build on your local system! Since we mounted the volume(s) <code class="highlighter-rouge">TF-Build*</code> into the container during each of the above tests, the .whl files are saved on the host system under <code class="highlighter-rouge">$TF-Build*/tensorflow_pkg/</code>.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>conda create tf-cpu-mkl-only
+<span class="nv">$ </span><span class="nb">source </span>activate tf-cpu-mkl-only
+<span class="nv">$ </span><span class="nb">cd</span> ../../
+<span class="o">(</span>tf-cpu-mkl-only<span class="o">)</span> <span class="nv">$ </span>pip install tensorflow_pkg/tensorflow-1.7.1-cp36-cp36m-linux_x86_64.whl
+</code></pre></div></div>
+
+  </div><a class="u-url" href="/2018/05/04/compiler-optimizations.html" hidden></a>
+</article>
+
+      </div>
+    </main>
+<footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">D-SALT</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">D-SALT</li>
+            <li><a class="u-email" href="mailto:as5281@columbia.edu">as5281@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:kvm2116@columbia.edu">kvm2116@columbia.edu</a></li>
+            <li><a class="u-email" href="mailto:pck2119@columbia.edu">pck2119@columbia.edu</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/aistein"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">aistein</span></a></li>
+</ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>D-SALT: Datacenter Sender Adaptive Low-Latency Transport</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

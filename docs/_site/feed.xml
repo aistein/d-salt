@@ -1,0 +1,824 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.5">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2019-06-13T13:29:13-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">D-SALT</title><subtitle>D-SALT: Datacenter Sender Adaptive Low-Latency Transport</subtitle><entry><title type="html">How To Run Simulations</title><link href="http://localhost:4000/2019/06/13/how-to-run-simulations.html" rel="alternate" type="text/html" title="How To Run Simulations" /><published>2019-06-13T00:00:00-04:00</published><updated>2019-06-13T00:00:00-04:00</updated><id>http://localhost:4000/2019/06/13/how-to-run-simulations</id><content type="html" xml:base="http://localhost:4000/2019/06/13/how-to-run-simulations.html">&lt;h2 id=&quot;workloads-1---5&quot;&gt;Workloads 1 - 5&lt;/h2&gt;
+
+&lt;p&gt;All parties having been granted access to this project should have &lt;code class=&quot;highlighter-rouge&quot;&gt;sudo&lt;/code&gt; priveleges on our gcloud instances; logging in with your own username and password will suffice.  The location of the D-SALT source code and run scripts is &lt;code class=&quot;highlighter-rouge&quot;&gt;/data/repositories/d-salt&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;configurations&quot;&gt;Configurations&lt;/h3&gt;
+&lt;p&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;d-salt/run_pipeline&lt;/code&gt; bash script takes as its argument a configuration file, templates for which can be found in &lt;code class=&quot;highlighter-rouge&quot;&gt;d-salt/config-templates&lt;/code&gt;.  Broadly, this script can deploy simualtions for workloads 1-5, each having various values for alpha, and with several switches that can change switch configurations like buffer-size and DCTCP K-value.  This script waits for all simulations to finish, and then optionally runs a battery of plotting and analysis scripts, which can be pushed to our GCS bins if &lt;code class=&quot;highlighter-rouge&quot;&gt;upload=true&lt;/code&gt; in the configuration file.  Here is a sample config-file `run_pipeline-template.conf’:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;c&quot;&gt;#!/bin/bash&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;#---------- begin user configurations -------------------------&lt;/span&gt;
+  &lt;span class=&quot;c&quot;&gt;# ns3 build area&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;ns3&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'./ns3.29-workspace-dev'&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# number of processors on this machine&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;processors&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;10
+
+  &lt;span class=&quot;c&quot;&gt;# number of flows to send&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;flows&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;300000
+
+  &lt;span class=&quot;c&quot;&gt;# queue buffer size&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;buff&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;42400
+
+  &lt;span class=&quot;c&quot;&gt;# DCTCP threshold&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;thresh&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;10
+
+  &lt;span class=&quot;c&quot;&gt;# PBS Alpha Values&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;alphas&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=(&lt;/span&gt;10 1000&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# blind alphas&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Workload Profiles&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;profiles&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=(&lt;/span&gt;1 2 3 4 5&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Desired Network Load&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;load&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0.8
+
+  &lt;span class=&quot;c&quot;&gt;# Load Multipliers&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;load_multipliers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=(&lt;/span&gt;3.5 4 5 6 7&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# 1:1 samethresh @80% load mutlipliers&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Oversubscribed?&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;oversub&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Nonblind?&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;nonblind&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Same DCTCP Thresholds?&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;samethresh&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Description of this Experiment&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;description&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;80% Load, W1-5, 1:1 Subscription, Blind&quot;&lt;/span&gt;
+
+  &lt;span class=&quot;c&quot;&gt;# Pipeline Script Control Switches&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;run_simulations&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# if false, expects pre-populated tmp dir&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;upload&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# if true, upload results to GCS&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;clean&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# if true, remove all temporary files&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;categorize_flows&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# generate flow category plots&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;without_dctcp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# add &quot;without_dctcp&quot; to sims&lt;/span&gt;
+  &lt;span class=&quot;nv&quot;&gt;scatterplots&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# graph slowdown &amp;amp; fct scatters&lt;/span&gt;
+  &lt;span class=&quot;c&quot;&gt;#----------- end user configurations --------------------------&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;run-command&quot;&gt;Run Command&lt;/h3&gt;
+
+&lt;p&gt;&lt;em&gt;Caution:&lt;/em&gt; These simulations can take many hours to run, even on very powerful machines; We strongly recommend deploying them either inside of a &lt;code class=&quot;highlighter-rouge&quot;&gt;tmux&lt;/code&gt; session or prefixed with &lt;code class=&quot;highlighter-rouge&quot;&gt;nohup&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Kick off the script in a recoverable environment in case your connection to the server is interrupted.  Make sure all desired configurations are updated in the config-file before moving forward&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; /data/repositories/d-salt
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;cp config-templates/run_pipeline-template.conf ./my_config.conf
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;vim my_config.conf
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;tmux new &lt;span class=&quot;nt&quot;&gt;-s&lt;/span&gt; run
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;./run_pipeline my_config.conf
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content><author><name></name></author><summary type="html">Instructions on how to run various tests using D-SALT on an 144-node NS3-simulated datacenter architecture</summary></entry><entry><title type="html">Tensorflow Data Formats</title><link href="http://localhost:4000/2018/05/06/tensorflow-data-formats.html" rel="alternate" type="text/html" title="Tensorflow Data Formats" /><published>2018-05-06T00:00:00-04:00</published><updated>2018-05-06T00:00:00-04:00</updated><id>http://localhost:4000/2018/05/06/tensorflow-data-formats</id><content type="html" xml:base="http://localhost:4000/2018/05/06/tensorflow-data-formats.html">&lt;h2 id=&quot;data-formats&quot;&gt;Data Formats&lt;/h2&gt;
+
+&lt;p&gt;One of the proposed optimizations according to Tensorflow is the choice of data format NCHW when using Nvidia GPUs. Here we will demonstrate and explain why.&lt;/p&gt;
+
+&lt;p&gt;To begin, we need to understand just what the acronym NCHW is. Specifically, in the context of convolutional networks and max pooling layers, NCHW is an acronym for the dimensions of the data being represented.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;N - number of items in the batch&lt;/li&gt;
+  &lt;li&gt;C - number of channels&lt;/li&gt;
+  &lt;li&gt;H - height of the matrix in each channel&lt;/li&gt;
+  &lt;li&gt;W - width of the matrix in each channel&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;So, clearly, if we use NCHW format and have input dimensions &lt;code class=&quot;highlighter-rouge&quot;&gt;(32, 3, 28, 28)&lt;/code&gt;, our data has a batch size of 32 and 3 input channels each of which is a 28 x 28 dimension matrix.&lt;/p&gt;
+
+&lt;p&gt;The alternative is NHWC, also known as &lt;code class=&quot;highlighter-rouge&quot;&gt;channels_last&lt;/code&gt; in some documentation, whihc simply places the channel dimension at the last value.&lt;/p&gt;
+
+&lt;h2 id=&quot;tensorflow-data-formats&quot;&gt;Tensorflow Data Formats&lt;/h2&gt;
+
+&lt;p&gt;Tensorflow has an unfortunate history with data formats. Originally, Tensorflow was only compatible with NHWC because it was slightly faster on CPUs. As we will explain, Tensorflow later introduced support for NCHW as Nvidia was able to optimize computations for this format.&lt;/p&gt;
+
+&lt;h2 id=&quot;experiments&quot;&gt;Experiments&lt;/h2&gt;
+
+&lt;p&gt;In order to conduct experiments we needed two things&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;A model that uses 2D convolutions&lt;/li&gt;
+  &lt;li&gt;A way to measure the running time of convolutions independent of other operations&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Satisfying (1) was much simpler than satisfying (2), but both required that we clone the tensorflow repository.&lt;/p&gt;
+
+&lt;h3 id=&quot;a-model&quot;&gt;A model&lt;/h3&gt;
+
+&lt;p&gt;Within the Tensorflow repository, under the &lt;code class=&quot;highlighter-rouge&quot;&gt;tensorflow/tensorflow/examples/tutorials/mnist/&lt;/code&gt; directory is a project &lt;code class=&quot;highlighter-rouge&quot;&gt;mnist_deep.py&lt;/code&gt;. We used this as the base to our model because it involves 2 layers which both use 2D convolutions along with max pooling. In order to easily run our model with either data format, we simply added an argument &lt;code class=&quot;highlighter-rouge&quot;&gt;data_format&lt;/code&gt; to specify, then built our computational graph accordingly.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python mnist_deep.py &lt;span class=&quot;nt&quot;&gt;--data_format&lt;/span&gt; NCHW
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;measuring-performance&quot;&gt;Measuring Performance&lt;/h3&gt;
+
+&lt;p&gt;In order to confirm that any improvement in performance is actually due to an improvement in convolutional computation speed, we needed to set up Tensorflow’s profiling tool &lt;code class=&quot;highlighter-rouge&quot;&gt;tfprof&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;For this particular case, it was a fairly painless experience, but I expect that to be the exception and not the rule. We simply had to cd into the directory in the Tensorflow repo, &lt;code class=&quot;highlighter-rouge&quot;&gt;tensorflow/tensorflow/core/profiler/&lt;/code&gt; and run one command.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;bazel build &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The entire build process took approximately 40 minutes, but also included several other Tensorflow tools (which makes me think cd-ing into the directory is not necessary).&lt;/p&gt;
+
+&lt;p&gt;Once the build was complete we had a file linked to an executable in the root directory of our project under &lt;code class=&quot;highlighter-rouge&quot;&gt;bazel-bin/tensorflow/core/profiler/profiler&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Now that the profiler command line tool was installed we needed the model to generate profiles that could be parsed. This was another very easy addition into the original model.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;contrib&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tfprof&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ProfileContext&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;profile_dir&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pctx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Session&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;global_variables_initializer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+      &lt;span class=&quot;c&quot;&gt;# profiler = tf.profiler.Profiler(sess.graph)&lt;/span&gt;
+      &lt;span class=&quot;c&quot;&gt;# time_per_epoch = []&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mnist&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;50&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The only line we needed to add was &lt;code class=&quot;highlighter-rouge&quot;&gt;with tf.contrib.tfprof.ProfileContext(...) as pctx&lt;/code&gt;. After adding this line, Tensorflow’s profiler will randomly sample steps of your training loop and dump the resulting profile to the specified directory.&lt;/p&gt;
+
+&lt;h2 id=&quot;results&quot;&gt;Results&lt;/h2&gt;
+
+&lt;p&gt;As stated in the Tensorflow performance guide, our convolutional operations performed better using the NCHW format than with the NHWC format. The output from the profiler after 2000 iterations was as follows&lt;/p&gt;
+
+&lt;h3 id=&quot;nchw&quot;&gt;NCHW&lt;/h3&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Profile:
+node name                      | requested bytes               | total execution &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt;          | accelerator execution &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt;      | cpu execution &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt;        | op occurrence &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;run|defined&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+...
+Conv2DBackpropFilter           89.20MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;95.93%, 26.08%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.64ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;67.76%, 14.83%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.42ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;63.40%, 17.18%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          219us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;80.78%, 7.91%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+Conv2D                         93.78MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;69.84%, 27.42%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.50ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;52.94%, 13.56%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.22ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;46.22%, 14.79%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          275us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;72.87%, 9.93%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+Conv2DBackpropInput            95.94MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;42.42%, 28.05%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.16ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;39.37%, 10.44%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.03ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;31.43%, 12.39%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          129us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;62.93%, 4.66%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1|2
+...
+MaxPoolGrad                      7.53MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;14.36%, 2.20%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          383us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;20.57%, 3.46%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          303us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;11.71%, 3.66%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,           79us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;47.00%, 2.85%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+MaxPool                          1.88MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;12.16%, 0.55%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          199us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;12.56%, 1.80%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,           123us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;4.83%, 1.49%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,           75us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;35.59%, 2.71%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;nhwc&quot;&gt;NHWC&lt;/h3&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Profile:
+node name                     | requested bytes                | total execution &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt;          | accelerator execution &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt;      | cpu execution &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt;        | op occurrence &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;run|defined&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+...
+Conv2DBackpropFilter          116.99MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;96.64%, 28.23%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.89ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;84.00%, 15.71%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.61ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;80.68%, 18.02%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          278us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;93.60%, 9.08%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+Conv2D                         95.23MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;68.41%, 22.98%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.75ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;68.29%, 14.55%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.42ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;62.67%, 15.85%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,         332us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;84.52%, 10.84%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+Conv2DBackpropInput           100.96MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;45.42%, 24.36%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.27ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;39.94%, 10.59%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1.11ms &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;32.22%, 12.49%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          156us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;62.19%, 5.09%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        1|2
+MaxPoolGrad                    45.64MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;21.06%, 11.01%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          906us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;29.35%, 7.54%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          719us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;19.73%, 8.05%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          186us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;57.10%, 6.07%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+...
+MaxPool                          1.88MB &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;10.04%, 0.45%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,          237us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;12.17%, 1.97%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,           180us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;5.12%, 2.02%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,           56us &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;32.68%, 1.83%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;,        2|2
+...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As we can see from the &lt;code class=&quot;highlighter-rouge&quot;&gt;total execution time&lt;/code&gt; column every operation related to convolutions, includeing max pooling, performed better. It is important to note that these results were consistent, but we are only displaying the result of one profile over relatively few iterations. Any larger model like those used in modern object recognition or segmentation problems would have much more tangible improvements.&lt;/p&gt;
+
+&lt;h2 id=&quot;explanation&quot;&gt;Explanation&lt;/h2&gt;
+
+&lt;p&gt;So the question remains, what is happening under the hood that makes Nvidia GPUs run convolutions faster in one format than in another?&lt;/p&gt;
+
+&lt;p&gt;As we know, Nvidia’s cuDNN library is written using the CUDA platform, allowing users to write in languages like c/c++. Because these languages access data in a row-major fashion, they can simply slice the NCHW tensor on &lt;code class=&quot;highlighter-rouge&quot;&gt;(1, 2)&lt;/code&gt; to get the first image’s second channel. If the data were instead formatted as NHWC they would have to slice along some axis like &lt;code class=&quot;highlighter-rouge&quot;&gt;(1, :, :, 2)&lt;/code&gt; to get the same data. This leads to a slight increase in complexity when operating on NHWC data.&lt;/p&gt;
+
+&lt;p&gt;According to the Tensorflow team running convolutions on CPUs is slightly more performant when the data is NHWC format. Additionally, this problem could be a hold-over from other languages like Matlab, which access matrices in a column-major fashion. In those languages, the performance in accessing data is the opposite.&lt;/p&gt;
+
+&lt;p&gt;Unfortunately NHWC is still the default data format for Tensorflow, and we found that the NCHW format threw exceptions for some operations when run on CPU (&lt;code class=&quot;highlighter-rouge&quot;&gt;max_pooling&lt;/code&gt;)&lt;/p&gt;</content><author><name></name></author><summary type="html">Tensorflow claims that when using nvidia gpus, the data format NCHW is more performant than NHWC for convolutional networks. We use the Tensorflow profiler to show this is the case.</summary></entry><entry><title type="html">Compiler Optimizations</title><link href="http://localhost:4000/2018/05/04/compiler-optimizations.html" rel="alternate" type="text/html" title="Compiler Optimizations" /><published>2018-05-04T00:00:00-04:00</published><updated>2018-05-04T00:00:00-04:00</updated><id>http://localhost:4000/2018/05/04/compiler-optimizations</id><content type="html" xml:base="http://localhost:4000/2018/05/04/compiler-optimizations.html">&lt;h2 id=&quot;tensorflow-compiler-optimizations&quot;&gt;Tensorflow Compiler Optimizations&lt;/h2&gt;
+
+&lt;hr /&gt;
+&lt;p&gt;&lt;em&gt;Difficulty: Intermediate&lt;/em&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
+&lt;p&gt;The Tensorflow team’s prime objective is to spread the use of its framework over as broad an audience as possible.  There are many classes of users who wish to take advantage of deep learning, from students to researchers to professional engineering teams.  It makes sense that by default Tensorflow has a standard set of configurations because not every use-case requires optimization.  However, the advanced users will be interested in fine-tuning the software to meet their needs.  Unfortunately, the instructions provided by Tensorflow towards this end are rather sparse.&lt;/p&gt;
+
+&lt;h2 id=&quot;overview&quot;&gt;Overview&lt;/h2&gt;
+&lt;p&gt;In this tutorial - which we have adapted from a fabulous series of &lt;a href=&quot;https://www.pugetsystems.com/labs/hpc/Build-TensorFlow-CPU-with-MKL-and-Anaconda-Python-3-6-using-a-Docker-Container-1133/&quot;&gt;posts&lt;/a&gt; by Dr. Donald Kinghorn at Puget Systems - we will walk through compiling Tensorflow from scratch three times: (1) Using the Intel MKL CPU optimizations; (2) Enabling the accelerated linear algebra (XLA) framework; (3) Combining these optimizations with GPU capability.  We will be using Docker containers to insulate our systems from the mess of compilation.  The result in each case will be a .whl file which can be pip-installed and tested inside of that Docker container.  Should you be happy with the results, you can then take the .whl file and install it the same way on your host system!&lt;/p&gt;
+
+&lt;h3 id=&quot;baseline-compiling-tf-for-cpu-with-no-optimizations&quot;&gt;Baseline: Compiling TF for CPU with No Optimizations&lt;/h3&gt;
+&lt;p&gt;In order to extract meaningful results from this exercise, we must be able to show the difference in performance between builds.  Despite the fact we aren’t adding any special compile switches here, it is still important for us to do this build with “docker isolation” because we must be careful not to cross-contaminate libraries between tensorflow installations.  We tried to test outside of docker initially and found that all tests yeilded the same results because anaconda was cacheing tensorflow libraries for reuse between different conda environments!  Here instead we do the build and test in the safe confines of a Docker container.&lt;/p&gt;
+
+&lt;p&gt;Before you begin, please &lt;a href=&quot;https://www.pugetsystems.com/labs/hpc/How-To-Setup-NVIDIA-Docker-and-NGC-Registry-on-your-Workstation---Part-1-Introduction-and-Base-System-Setup-1095/&quot;&gt;install and configure Docker&lt;/a&gt;. These instructions are copied from Dr. Kinghorn’s post mentioned above, reformatted here for convenience.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Make a directory to do your build
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;mkdir TF-build
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;TF-build
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Download tensorflow source code and checkout version 1.7
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git clone https://github.com/tensorflow/tensorflow
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;tensorflow/
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git checkout r1.7
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Setup docker container build directory
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;mkdir dockerfile
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;dockerfile
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Supply the necessary dependency files/hosts for Anaconda and Bazel. Note that if you are using another system aside from x86-linux you will need to acquire the appropriate anaconda file.
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;wget https://repo.anaconda.com/archive/Anaconda3-5.1.0-Linux-x86_64.sh
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; bazel.list
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Create the Dockerfile. Save the following as “Dockerfile”, with a capital D!&lt;/p&gt;
+
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; &lt;span class=&quot;c&quot;&gt;# Dockerfile to setup a build environment for TensorFlow&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# using Intel MKL and Anaconda3 Python&lt;/span&gt;
+    
+ FROM ubuntu:16.04
+    
+ &lt;span class=&quot;c&quot;&gt;# Add a few needed packages to the base Ubuntu 16.04&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# Dr. Kinghorn prefers emacs-nox, We prefer vim-nox&lt;/span&gt;
+ RUN &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     apt-get update &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; apt-get install &lt;span class=&quot;nt&quot;&gt;-y&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     build-essential &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     curl &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     vim-nox &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     git &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     openjdk-8-jdk &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+     &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; rm &lt;span class=&quot;nt&quot;&gt;-rf&lt;/span&gt; /var/lib/lists/&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;
+    
+ &lt;span class=&quot;c&quot;&gt;# Add the repo for bazel and install it.&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# I just put it in a file bazel.list and coped in the file&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# containing the following line&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8&lt;/span&gt;
+ COPY bazel.list /etc/apt/sources.list.d/
+ RUN &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+   curl https://bazel.build/bazel-release.pub.gpg | apt-key add - &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+   apt-get update &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; apt-get install &lt;span class=&quot;nt&quot;&gt;-y&lt;/span&gt; bazel
+    
+ &lt;span class=&quot;c&quot;&gt;# Copy in and install Anaconda3 from the shell archive&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# Anaconda3-5.1.0-Linux-x86_64.sh&lt;/span&gt;
+ COPY Anaconda3&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; /root/
+ RUN &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+   &lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; /root&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; chmod 755 Anaconda3&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;.sh &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+   ./Anaconda3&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;.sh &lt;span class=&quot;nt&quot;&gt;-b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+   &lt;span class=&quot;nb&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'export PATH=&quot;$HOME/anaconda3/bin:$PATH&quot;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; .bashrc &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+   rm &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; Anaconda3&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;.sh
+    
+ &lt;span class=&quot;c&quot;&gt;# That's it! That should be enough to do a TensorFlow 1.7 CPU build&lt;/span&gt;
+ &lt;span class=&quot;c&quot;&gt;# using Anaconda Python 3.6 Intel MKL with gcc 5.4&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Create the Docker container and run it. Note you will have to set the environmental variable PROJECT yourself to the proper path to your working directory. &lt;strong&gt;Note:&lt;/strong&gt; you must always be in the &lt;em&gt;dockerfile&lt;/em&gt; directory to use the local configurations file.
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;docker build &lt;span class=&quot;nt&quot;&gt;-t&lt;/span&gt; tf-build-1.7-cpu-mkl-only &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;docker run &lt;span class=&quot;nt&quot;&gt;--rm&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-it&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-v&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;$PROJECT&lt;/span&gt;/TF-build:/root/TF-build tf-build-1.7-cpu-mkl-only
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;ul&gt;
+      &lt;li&gt;A quick aside about Docker and the command line arguments here, because they are interesting.  If we consider a “virtual machine” as abstracting the &lt;em&gt;hardware&lt;/em&gt; so that any &lt;em&gt;operating system&lt;/em&gt; may run upon it, we can similarly consider a “container” as abstracting the &lt;em&gt;operating system&lt;/em&gt; so that any &lt;em&gt;application&lt;/em&gt; may run upon it. As such, the most common use-cases for containers do not require much if any interaction with the container via command line, usually only through whatever interface is provided by the application.  In the case of this tutorial, however, we are using Docker more like a virtual machine than a a container.  We’ll be using the command line to interact with it, just like we would in a VM. The difference here is that a container is much lighter-weight (and much less capable).  It will build and be ready for use in minutes, and there’s no downloading multi-gigabyte .iso files necessary.  Once we are done doing the build, we’ll blow it away.  Note the significance of the command line options for &lt;code class=&quot;highlighter-rouge&quot;&gt;docker run&lt;/code&gt; used (&lt;a href=&quot;https://docs.docker.com/engine/reference/commandline/run/#options&quot;&gt;documentation here&lt;/a&gt;):&lt;/li&gt;
+    &lt;/ul&gt;
+    &lt;ul&gt;
+      &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;--rm&lt;/code&gt; will delete the container from our system once we exit the instance&lt;/li&gt;
+      &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-i&lt;/code&gt; keep stdin open so that the container may receive our input&lt;/li&gt;
+      &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-t&lt;/code&gt; allocates a pseudo-TTY (text-only console)&lt;/li&gt;
+      &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-v&lt;/code&gt; mount the &lt;em&gt;volume&lt;/em&gt; (folder containing tensorflow source-code) at a specific point inside the container&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Configure Tensorflow. You should now be greeted with a custom CLI prompt, which indicates that we are running inside the container.
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;root/TF-build/tensorflow
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; ./configure
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Say yes to “jemalloc support”, and no to every other prompt (including CUDA support, as we are not yet demonstrating GPU).&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Build Tensorflow. &lt;strong&gt;Warning:&lt;/strong&gt; This can take quite some time, on the order of 30 minutes in the case of our GCP instance.
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; bazel build //tensorflow/tools/pip_package:build_pip_package
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Create the pip package
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; bazel-bin/tensorflow/tools/pip_package/build_pip_package ../tensorflow_pkg
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;We test this base installation in a new conda environment within the docker container:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; conda create &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; tf-cpu-base
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;source &lt;/span&gt;activate tf-cpu-base
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; pip install tensorflow_pkg/tensorflow-1.7.1-cp36-cp36m-linux_x86_64.whl
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;A quick test of matrix multiplication will elucidate our motivation for the undertaking ahead.  Running the following python script&lt;/p&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;tensorflow&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;time&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_random_seed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;42&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;random_normal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;random_normal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;checkMM&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+     &lt;span class=&quot;n&quot;&gt;start_time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Session&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+             &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reduce_sum&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;matmul&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot; took {} seconds&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start_time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;checkMM&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;produces the following results:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;2018-05-04 16:51:19.722377: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: SSE4.1 SSE4.2 AVX AVX2 FMA
+&lt;span class=&quot;nt&quot;&gt;-873849&lt;/span&gt;.9
+ took 22.90920376777649 seconds
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;A more in depth performance comparison is the subject of a later section in this post, but let us briefly inspect the output.  The given information states that we have certain capabilities on our CPU which are not being utilized by our Tensorflow build: SSE4.1 SSE4.2 AVX AVX2 FMA.  What are they?&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;SSE4 Instructions:&lt;/strong&gt; “Streaming SIMD Extensions 4”. These are assembly instructions for Intel and AMD processors which allow for “packed” read/writes, string comparisons, and integer operations.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;AVX Instructions:&lt;/strong&gt; “Adanced Vector Extensions” allow Intel and AMD processors to do mathematical operations and memory manipulations on up to 256 bits of input data at a time.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;FMA Instrucions:&lt;/strong&gt; “Fused-Multiply Accumulate” instructuions are exactly as the name implies: In a single basic computational step, Intel and AMD processors with these extensions can - for example - take 3 inputs a,b,c and produce a = a*c + b.
+It is clear that having these instruction sets enabled in our Tensorflow build would improve the performance of any program that could benefit from SIMD (single-instruction multiple-data), and matrix multiplication is exactly one such application!&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Now you may be thinking “though these instructions can help with SIMD on the CPU, why should we even bother? Afterall, isn’t SIMD exactly what GPGPU is for?!”  That is a very good question without a straightforward answer, and its discussion is certainly beyond the scope of this post.  For a thorough understanding of the complexities of this question, check out this (somewhat outdated) white-paper by Intel, &lt;a href=&quot;http://sbel.wisc.edu/Courses/ME964/Literature/LeeDebunkGPU2010.pdf&quot;&gt;“Debunking the 100x GPU vs. CPU Myth”&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;optimization-1-compiling-with-intel-mkl-libraries&quot;&gt;Optimization 1: Compiling with Intel MKL Libraries&lt;/h3&gt;
+&lt;p&gt;In order to enable Tensorflow to use SSE4, AVX, and FMA instructions, we must compile it from the source code with the special siwtch &lt;code class=&quot;highlighter-rouge&quot;&gt;--config=mkl&lt;/code&gt;. The steps to do this are exactly the same above, but replacing step 8 with the following:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Build Tensorflow. &lt;strong&gt;Warning:&lt;/strong&gt; This can take quite some time, on the order of 30 minutes in the case of our GCP instance.
+    &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; bazel build &lt;span class=&quot;nt&quot;&gt;--config&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;opt &lt;span class=&quot;nt&quot;&gt;--config&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;mkl //tensorflow/tools/pip_package:build_pip_package
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;That’s it! Now it is time to see what kind of performance we gained from the scratch compilation.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; python testMM.py
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;Here is the output we got:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;-873847&lt;/span&gt;.3
+ took 9.988160133361816 seconds
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Fantastic! The warning about SSE4, AVX, and FMA capabilities has disappeared, and our matrix multiplication took less than half the original time!  For a better understanding of what changed, we built some profiles. Upon deploying the native python profiler, via &lt;code class=&quot;highlighter-rouge&quot;&gt;python -m cProfile -s cumtime mm_test.py &amp;amp;&amp;gt; profile.txt&lt;/code&gt; we found the profiles very hard to interpret.  As such, we decided to use the native tensorflow chrome-trace to get more insight:&lt;/p&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;tensorflow&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;time&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;tensorflow.python.client&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timeline&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_random_seed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;42&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;random_normal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;random_normal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;checkMM&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;start_time&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Session&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;c&quot;&gt;# options to trace execution&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;options&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;RunOptions&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;trace_level&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;RunOptions&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;FULL_TRACE&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;run_metadata&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;RunMetadata&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+                &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reduce_sum&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;matmul&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;\
+                                 &lt;span class=&quot;n&quot;&gt;options&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;options&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;\
+                                 &lt;span class=&quot;n&quot;&gt;run_metadata&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run_metadata&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+                &lt;span class=&quot;c&quot;&gt;# create timeline object and write to json&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;fetched_timeline&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timeline&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Timeline&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run_metadata&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;step_stats&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;chrome_trace&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fetched_timeline&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;generate_chrome_trace_format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+                &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'timeline.json'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'w'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+                        &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chrome_trace&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot; took {} seconds&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start_time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;checkMM&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;In your Google Chrome browser, you can view the output file &lt;code class=&quot;highlighter-rouge&quot;&gt;timeline.json&lt;/code&gt; by navigating to &lt;code class=&quot;highlighter-rouge&quot;&gt;chrome://tracing&lt;/code&gt; and then loading the json file.&lt;/p&gt;
+
+&lt;p&gt;Base-Trace:
+&lt;img src=&quot;/dlprof/assets/base-trace.png&quot; alt=&quot;base trace&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;MKL-Trace:
+&lt;img src=&quot;/dlprof/assets/mkl-trace.png&quot; alt=&quot;mkl trace&quot; /&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;installation-on-the-host-system&quot;&gt;Installation on the Host System&lt;/h4&gt;
+&lt;p&gt;If you’re happy with the results, then install this tensorflow build on your local system! Since we mounted the volume(s) &lt;code class=&quot;highlighter-rouge&quot;&gt;TF-Build*&lt;/code&gt; into the container during each of the above tests, the .whl files are saved on the host system under &lt;code class=&quot;highlighter-rouge&quot;&gt;$TF-Build*/tensorflow_pkg/&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;conda create tf-cpu-mkl-only
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;source &lt;/span&gt;activate tf-cpu-mkl-only
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ../../
+&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;tf-cpu-mkl-only&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;pip install tensorflow_pkg/tensorflow-1.7.1-cp36-cp36m-linux_x86_64.whl
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content><author><name></name></author><summary type="html">the uncertain and treacherous path of building tensorflow from scratch</summary></entry><entry><title type="html">Multi Gpu Training</title><link href="http://localhost:4000/2018/04/29/multi-gpu-training.html" rel="alternate" type="text/html" title="Multi Gpu Training" /><published>2018-04-29T00:00:00-04:00</published><updated>2018-04-29T00:00:00-04:00</updated><id>http://localhost:4000/2018/04/29/multi-gpu-training</id><content type="html" xml:base="http://localhost:4000/2018/04/29/multi-gpu-training.html">&lt;h2 id=&quot;taking-advantage-of-graph-structure&quot;&gt;Taking Advantage of Graph Structure&lt;/h2&gt;
+&lt;p&gt;After seeing the performance improvements of using GPUs to train a model we want to see if we could take advantage of our computational graph structure to use multiple GPUs and parallelize computation. In our particular case the computational graph has two tower-like structures, a convolution, activation, fully connected layer, and activation, over a set of user reviews, and a mirroring convolution over a set of item reviews.
+&lt;img src=&quot;/dlprof/assets/parallel-tower-structure.png&quot; alt=&quot;parallel towers&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;It seems like a model with such structure could easily be parallelized by placing the two tower operations on different gpus.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;table&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;embedding_lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;word_embeddings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_conv1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;conv1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;filters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;kernel_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;use_bias&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tanh&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;user_conv&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_max_pool1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_pooling1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_conv1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_flat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flatten&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_max_pool1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_dense&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dense&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_flat&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;relu&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;table&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;embedding_lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;word_embeddings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_conv1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;conv1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;filters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;kernel_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;use_bias&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tanh&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;item_conv&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_max_pool1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_pooling1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_conv1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_flat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flatten&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_max_pool1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_dense&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dense&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_flat&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;relu&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In the code above we used Tensorflow’s &lt;code class=&quot;highlighter-rouge&quot;&gt;with tf.device(...)&lt;/code&gt; feature to place our tower operations on different devices. Below we present the average runtime per epoch over five epochs for single-gpu and dual-gpu training.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Device Placement&lt;/th&gt;
+      &lt;th&gt;Average Seconds/epoch Time&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Single GPU&lt;/td&gt;
+      &lt;td&gt;20.455 s&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Dual GPU&lt;/td&gt;
+      &lt;td&gt;22.500 s&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;We can see above that our model actually took MORE time to train on average when we trained on GPU. This effect is actually common in the deep learning community because GPUs have been optimized so heavily for matrix computations that the time it takes to transfer data between devices slows down processing. We can confirm that this is the actual reason our model slows down by making the model alternate between devices for each operation and see if it slows down further.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;table&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;embedding_lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;word_embeddings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_conv1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;conv1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;filters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;kernel_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;use_bias&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tanh&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;user_conv&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_max_pool1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_pooling1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_conv1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_flat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flatten&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_max_pool1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;user_dense&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dense&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_flat&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;relu&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;table&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;embedding_lookup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;word_embeddings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_conv1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;conv1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;filters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;kernel_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;use_bias&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tanh&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;item_conv&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_max_pool1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_pooling1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_conv1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:0&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_flat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flatten&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_max_pool1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/gpu:1&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;item_dense&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;layers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dense&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_flat&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;relu&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;With this exaggerated device placement we now have an average runtime of 23.021 seconds per epoch, confirming our suspicions! What if we would like more information and to find out exactly how much time is spent transfering data? Lets now take a look at the nvidia gpu profiling tools and see if we can narrow down the time spent transfering.&lt;/p&gt;
+
+&lt;p&gt;To run the nvidia gpu profiler simply run the command&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;nvprof python &lt;span class=&quot;s2&quot;&gt;&quot;DeepCoNN - dual gpu lots of device transfers.py&quot;&lt;/span&gt; &amp;amp;&amp;gt; nvidia.txt
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This will create a file &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.txt&lt;/code&gt; containing a summary of GPU operations. After running for our “parallelized towers” model and “exaggerated device placement” we found the following important difference. Below we present the single most costly GPU function call for each of our tested models.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Time(%) Time         Calls  Avg       Min       Max       Name
+# exaggerated device placement
+24.53%  13.0696s     94774  137.90us  4.3190us  994.70us  [CUDA memcpy PtoP]
+# reasonable device placement
+20.08%  10.0978s     78292  128.98us  4.3190us  893.33us  [CUDA memcpy PtoP]
+# single device placement
+17.54%  6.92109s      4120  1.6799ms  290.78us  2.7316ms  void tensorflow::UnsortedSegmentCustomKernel...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As we can see, the exagerated device placement is causing our model to spend nearly 5% more peer-to-peer data copies, resulting in 3 extra seconds spent simply copying data. On the other hand, when we use a single GPU the majority of time is spent on a tensorflow kernel operation, as expected in a model who’s primary operation is a convolution. This shows that for some models, and I would venture to say most models that fit in single-GPU memory, training times are fastest when training on one GPU.&lt;/p&gt;</content><author><name></name></author><summary type="html">Two gpus &gt; One gpu?</summary></entry><entry><title type="html">Tensorboard Alpha Features</title><link href="http://localhost:4000/2018/04/27/tensorboard-alpha-features.html" rel="alternate" type="text/html" title="Tensorboard Alpha Features" /><published>2018-04-27T00:00:00-04:00</published><updated>2018-04-27T00:00:00-04:00</updated><id>http://localhost:4000/2018/04/27/tensorboard-alpha-features</id><content type="html" xml:base="http://localhost:4000/2018/04/27/tensorboard-alpha-features.html">&lt;p&gt;As many of us know, Tensorboard is the leading tool for visualizing deep neural networks. It provides everything from graphing losses and histograms of weight values to 3D embedding maps of images, or words. Additionally, some Tensorflow users are familiar with the Tensorflow debugger, tfdbg.&lt;/p&gt;
+
+&lt;h2 id=&quot;why-do-we-need-a-debugger&quot;&gt;Why Do We Need A Debugger&lt;/h2&gt;
+
+&lt;p&gt;The first question to ask is why does Tensorflow need its own debugger at all?&lt;/p&gt;
+
+&lt;p&gt;For those of us less familiar with Tensorflow, you may have noticed a general code flow when building models in Tensorflow. First we define some computation as a series of nodes using declarations like &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.layers.conv1d(...)&lt;/code&gt;, then we pass data into those computations using a session &lt;code class=&quot;highlighter-rouge&quot;&gt;op = tf.Session().run([training_operation], feed_dict={x: 123})&lt;/code&gt; (we’ll use a &lt;code class=&quot;highlighter-rouge&quot;&gt;feed_dict&lt;/code&gt; here, but please read our post on Data Ingestion to find out about other options). So what is the output of this intermediary 1d convolution we’ve defined? In order to actually view the output we have to add the operation to our session run like this &lt;code class=&quot;highlighter-rouge&quot;&gt;op, conv = tf.Session().run([training_operation, conv], feed_dict={x: 123})&lt;/code&gt;. What if we had a 100 layers and wanted to see the output at various layers? It gets immediately obvious that this solution does not scale.&lt;/p&gt;
+
+&lt;p&gt;So instead, what if you use the python debugger to step through your code? As we saw in another post (Data Ingestion), the python profiler shows the training of our network as a single python operation!&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      851   24.341    0.029   24.341    0.029 {built-in method _pywrap_tensorflow_internal.TF_Run}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;This wouldn’t be particularly useful to step through in a debugger.&lt;/p&gt;
+
+&lt;p&gt;Because tensorflow computational graphs are so difficult to debug, the Tensorflow team created tfdbg to allow users to step through graph computations and view intermediary values.&lt;/p&gt;
+
+&lt;h2 id=&quot;using-the-command-line-debugger&quot;&gt;Using The Command Line Debugger&lt;/h2&gt;
+
+&lt;p&gt;Activating and using Tensorflows command-line debugger is very simple.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;tensorflow.python&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;debug&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf_debug&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf_debug&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LocalCLIDebugWrapperSession&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can then continue to use our session as usual to run a computational graph, but this time, we run our model with the the &lt;code class=&quot;highlighter-rouge&quot;&gt;--debug&lt;/code&gt; flag passed to python.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;python&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DeepCoNN&lt;/span&gt;\ &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;\ &lt;span class=&quot;n&quot;&gt;feed&lt;/span&gt;\ &lt;span class=&quot;nb&quot;&gt;dict&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;py&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;debug&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;From here we get to a view with some instructions on how to start running our computational graph&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/tfdbg_home.png&quot; alt=&quot;tfdbg home&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This screen gives us some simple instructions like &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; to start our computation. After typing run and hitting enter, we can step through our computational graph and view the outputs of different operations!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/step_through_computations.png&quot; alt=&quot;computation step&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The Tensorflow debugger is an extremely useful tool, especially for finding out where and when gradients are becoming nan or zero, but in our particular case we need more context than what is provided above. To be specific, because our computational graph has two parallel word embedding lookups, one for user reviews and one for item reviews, the above image is not useful because we do not know which of the two is creating this gradient.&lt;/p&gt;
+
+&lt;h2 id=&quot;a-more-friendly-debugger&quot;&gt;A More Friendly Debugger&lt;/h2&gt;
+
+&lt;p&gt;To ease the use of the Tensorflow debugger, the team also created a visual debugging tool that takes advantage of Tensorboard! Unfortunately, this tool is in a alpha stage and has no official documentation on tensorflow.org outside of a link pointing to a README.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Q: Is there a GUI for tfdbg?&lt;/p&gt;
+
+  &lt;p&gt;A: Yes, the TensorBoard Debugger Plugin is the GUI of tfdbg. It offers features such as inspection of the computation graph, real-time visualization of tensor values, continuation to tensor and conditional breakpoints, and tying tensors to their graph-construction source code, all in the browser environment. To get started, please visit its &lt;a href=&quot;https://github.com/tensorflow/tensorboard/blob/master/tensorboard/plugins/debugger/README.md&quot;&gt;README&lt;/a&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;We must, however, thank the Tensorflow team, because the included README is thorough. In order to run the visual Tensorflow debugger with a tf.Estimator we simply add the following hook to our train method.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;tensorflow.python&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;debug&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf_debug&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;hook&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf_debug&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;TensorBoardDebugHook&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;localhost:6060&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;scoring_function&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;input_fn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train_input_fn&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hooks&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hook&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;From here we have to&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Start tensorboard with the debugger flag listening on the port specified above&lt;/li&gt;
+  &lt;li&gt;Start training our model&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Note that it must be done in this order and we must provide tensorboard with the &lt;code class=&quot;highlighter-rouge&quot;&gt;--debugger_port&lt;/code&gt; flag.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;tensorboard &lt;span class=&quot;nt&quot;&gt;--logdir&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;output &lt;span class=&quot;nt&quot;&gt;--debugger_port&lt;/span&gt; 6060
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Your tensorboard should now display a &lt;code class=&quot;highlighter-rouge&quot;&gt;Debugger&lt;/code&gt; tab in addition to some of the standard tabs. Clicking on said tab gives us the following handy prompt in case you forgot to add the debugger hook.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/handy_prompt.png&quot; alt=&quot;handy prompt&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;If everything is set up and communicating correctly, then when you run your visual debugger enabled model your execution should pause and display some obscure message like &lt;code class=&quot;highlighter-rouge&quot;&gt;56 ops no flops stats due to incomplete shapes&lt;/code&gt;. Unclear what this means, but I have taken it as a symbol that the debugger has stopped our model execution and is waiting for us to provide a command.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/model_pause.png&quot; alt=&quot;waiting for command&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Looking back at tensorboard and the visual debugger now, we already have much more context than the command line tools. We can clearly see all our computational graph operations and tensors as well as which device those operations take place on.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/operations_and_devices.png&quot; alt=&quot;ops and devices&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;From here we can select a specific computation or variable, then monitor that computation through graph execution. For the purposes of this example I will select a convolution operation.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/conv_operation_selection.png&quot; alt=&quot;hash lookup selection&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Now we can tell Tensorboard to continue running the debugger until some specific break conditions are met. For example we can run our model over 5 different sessions waiting until one of our selected tensors meets one of the provided conditions. This is menu and set of options is reached by clicking the &lt;code class=&quot;highlighter-rouge&quot;&gt;Continue&lt;/code&gt; button in the bottom left. For purposes of the demonstration we will wait for some condition that is almost guaranteed to be true, like waiting for the max value of any of our watched tensors to be greater than -1. This condition should be just about guaranteed true because of our random initialization.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/step_through.png&quot; alt=&quot;step and continue buttons&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/run_till_break.png&quot; alt=&quot;run till condition&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;After one of the conditions are met we get some very useful data on our selected operation and can even montor the value of our tensors. By hitting the continue button we can also watch the debugger loop through an iteration until it returns to the currently monitored tensor.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/loop_through_iteration.gif&quot; alt=&quot;loop&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Although Tensorflow debugging can often be unruly the Tensorflow team and community have put a significant amount of time into developing tools that give us insight into their graph computation. Currently the visual debugger is only in an alpha release, but I could easily see a future where connecting the visual debugger is automatic. The visual debugger in particular could be an extremely useful tool for understanding how neural networks learn, or demonstrating things like networks that do not converge due to high learning rates. Even as an alpha release I see use for the visual debugger to understand how tensorflow models execute and why they either fail or work well. I am looking forward to seeing where the Tensorflow team takes this feature set in the future.&lt;/p&gt;</content><author><name></name></author><summary type="html">Tensorboard is a the standard tool for visualizing deep neural networks. While we were all busy visualizing loss curves, Tensorboard released an interactive debugger.</summary></entry><entry><title type="html">Working With Tfrecords</title><link href="http://localhost:4000/2018/04/25/working-with-tfrecords.html" rel="alternate" type="text/html" title="Working With Tfrecords" /><published>2018-04-25T00:00:00-04:00</published><updated>2018-04-25T00:00:00-04:00</updated><id>http://localhost:4000/2018/04/25/working-with-tfrecords</id><content type="html" xml:base="http://localhost:4000/2018/04/25/working-with-tfrecords.html">&lt;p&gt;Every deep neural network training algorithm revolves around a stream of input data to train on. In Tensorflow the preferred method for data input is via tfrecords. Tfrecords are a binary file format of your data using Google’s protocol buffers which provide fast and efficient disk reads. Tfrecords also allow datasets to be split across multiple files in case they do not fit in memory.&lt;/p&gt;
+
+&lt;p&gt;The list of advantages is long, but unfortunately in the mass of improvement and development done on Tensorflow, the tfrecords api was left poorly documented and poorly explained. One issue raised on github sums this up quite nicely.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/tfrecords_documentation_dne.png&quot; alt=&quot;Documentation Missing&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;So, how exactly do we create tfrecords? Below we have provided an example of turning strings into tfrecords of variable length. This example is important because all the examples in Tensorflow documentation transform images of the same size into TFRecrds of the same size. We, on the other hand will be working with text data, and would like tensorflow to handle the embedding creation and word-to-index transformation for us.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;mf&quot;&gt;1.&lt;/span&gt;  &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;to_bytearray_feature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;2.&lt;/span&gt;      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Feature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bytes_list&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BytesList&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;bytes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;utf8&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)]))&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;3.&lt;/span&gt;  &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;wrap_float_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;4.&lt;/span&gt;      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Feature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;float_list&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;FloatList&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]))&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;5.&lt;/span&gt;  
+&lt;span class=&quot;mf&quot;&gt;6.&lt;/span&gt;  &lt;span class=&quot;n&quot;&gt;tfrecords_filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;data/demo.tfrecords&quot;&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;7.&lt;/span&gt;  &lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;python_io&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;TFRecordWriter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tfrecords_filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;8.&lt;/span&gt;  
+&lt;span class=&quot;mf&quot;&gt;9.&lt;/span&gt;  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rating&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;zip&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train_user_lines&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;train_item_lines&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;train_ratings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;10.&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;example&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Example&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;11.&lt;/span&gt;         &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;12.&lt;/span&gt;             &lt;span class=&quot;n&quot;&gt;feature&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;13.&lt;/span&gt;                 &lt;span class=&quot;s&quot;&gt;'user_review'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;to_bytearray_feature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;14.&lt;/span&gt;                 &lt;span class=&quot;s&quot;&gt;'item_review'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;to_bytearray_feature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;15.&lt;/span&gt;                 &lt;span class=&quot;s&quot;&gt;'rating'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;wrap_float_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;float&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rating&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;16.&lt;/span&gt;             &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;17.&lt;/span&gt;         &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;18.&lt;/span&gt;     &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;19.&lt;/span&gt; 
+&lt;span class=&quot;mf&quot;&gt;20.&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;example&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SerializeToString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;First, we will analyze the first two lines, inside out.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;bytes(value, &quot;utf8&quot;)&lt;/code&gt; - This converts the input into it’s utf-8 encoded representation&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;tf.train.BytesList(value=[...])&lt;/code&gt; - This method has one required argument, value, which must by a &lt;em&gt;list of bytes&lt;/em&gt;. For us this is a list of length one where the bytes represent the original sentence.&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;tf.train.Feature(bytes_list=...)&lt;/code&gt; - This creates a Tensorflow Feature object, and accepts one of &lt;code class=&quot;highlighter-rouge&quot;&gt;bytes_list, float_list, int64_list&lt;/code&gt;. In our case we pass &lt;code class=&quot;highlighter-rouge&quot;&gt;bytes_list&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Lines 3 - 4 are extremely similar except we create a FloatList. Again, this list has exactly one element, the input value. Continuing on, in lines 11 - 17 we create a set of Features. Features take one named input &lt;code class=&quot;highlighter-rouge&quot;&gt;feature&lt;/code&gt;, which must be a dictionary of string to &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.train.Feature&lt;/code&gt; objects. Notice that at this point we are using the previously defined functions to create &lt;code class=&quot;highlighter-rouge&quot;&gt;Feature&lt;/code&gt; objects around the &lt;code class=&quot;highlighter-rouge&quot;&gt;user, item, rating&lt;/code&gt; objects. In this specific case user and item are both a string, but rating is an integer which is why it needs to be cast to a float. Finally, lines 10 - 20 create an &lt;code class=&quot;highlighter-rouge&quot;&gt;Example&lt;/code&gt; object, this object takes one &lt;code class=&quot;highlighter-rouge&quot;&gt;features&lt;/code&gt; input. If you’re wondering why this is wrapped so many times, you aren’t alone, I wondered the same thing. This api could probably be more well designed by wrapping our dictionary for us, or taking native python dictionary objects representing features directly as input to the &lt;code class=&quot;highlighter-rouge&quot;&gt;Example&lt;/code&gt; constructor.&lt;/p&gt;
+
+&lt;p&gt;In lines 6 - 7 we create a writer object and specify the file it will write to. On line 20 we write our example object to disk, serialized as a string.&lt;/p&gt;
+
+&lt;p&gt;It is important to note that in order to read this data, the &lt;code class=&quot;highlighter-rouge&quot;&gt;user_review&lt;/code&gt; field of each &lt;code class=&quot;highlighter-rouge&quot;&gt;Features&lt;/code&gt; object must be the same length. This is the reason we created a &lt;code class=&quot;highlighter-rouge&quot;&gt;BytesList&lt;/code&gt; of length 1 rather than splitting our sentence into multiple words in advance.&lt;/p&gt;
+
+&lt;p&gt;Now we will move on to reading our data from the demo.tfrecords file we wrote.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;mf&quot;&gt;1.&lt;/span&gt;  &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;parse_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;record&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;2.&lt;/span&gt;      &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;3.&lt;/span&gt;              &lt;span class=&quot;s&quot;&gt;&quot;user_review&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;FixedLenSequenceFeature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;allow_missing&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;4.&lt;/span&gt;              &lt;span class=&quot;s&quot;&gt;&quot;item_review&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;FixedLenSequenceFeature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;allow_missing&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;5.&lt;/span&gt;              &lt;span class=&quot;s&quot;&gt;&quot;rating&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;FixedLenFeature&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;float32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;6.&lt;/span&gt;          &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;7.&lt;/span&gt;      &lt;span class=&quot;n&quot;&gt;parsed_features&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parse_single_example&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;record&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;8.&lt;/span&gt;      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;parsed_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;user_review&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;parsed_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;item_review&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;parsed_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;rating&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;9.&lt;/span&gt;  
+&lt;span class=&quot;mf&quot;&gt;10.&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;split_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rating&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;11.&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;user&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;string_split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;12.&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;item&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;string_split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;13.&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;values&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;values&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rating&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;14.&lt;/span&gt; 
+&lt;span class=&quot;mf&quot;&gt;15.&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;truncate_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rating&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;16.&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;item&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rating&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;17.&lt;/span&gt; 
+&lt;span class=&quot;mf&quot;&gt;18.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;TFRecordDataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;data/demo.tfrecords&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;19.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parse_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;20.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;21.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;truncate_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;22.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;padded_batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padded_shapes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;None&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padding_values&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;unk&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;unk&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;23.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;iterator&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;make_one_shot_iterator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;24.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_point&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;iterator&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_next&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;mf&quot;&gt;25.&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_point&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;eval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;session&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Session&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This time it is best to start at the bottom. Line 18 creates a TFRecordDataset from our file. In our case there is one file, but if there were multiple files and our data did not fit in memory we could pass a list of files instead. Next on line 19 we call our &lt;code class=&quot;highlighter-rouge&quot;&gt;parse_fn&lt;/code&gt; on each input value.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;parse_fn&lt;/code&gt; calls &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.parse_single_example&lt;/code&gt; where each example is expected to have three fields defined as above. Note that we used tf.FixedLenSequenceFeature because we found it the simplest api to work with. For example, &lt;code class=&quot;highlighter-rouge&quot;&gt;user_review: tf.FixedLenSequenceFeature([], tf.string, allow_missing=True)&lt;/code&gt; means that we expect each &lt;code class=&quot;highlighter-rouge&quot;&gt;user_review&lt;/code&gt; to have one, undefined dimension and be of type &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.string&lt;/code&gt;, where missing values are also allowed. Note that when using the &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.string&lt;/code&gt; type, &lt;code class=&quot;highlighter-rouge&quot;&gt;allow_missing&lt;/code&gt; was required.&lt;/p&gt;
+
+&lt;p&gt;Next we call &lt;code class=&quot;highlighter-rouge&quot;&gt;split_fn&lt;/code&gt; to split our Tensorflow strings into arrays of strings. Since &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.string_split&lt;/code&gt; returns a map of indices and values, we must return only the values from our split.&lt;/p&gt;
+
+&lt;p&gt;Next we call the &lt;code class=&quot;highlighter-rouge&quot;&gt;truncate_fn&lt;/code&gt; to shorten any strings longer than our predefined length to the appropriate size. For us, this was required because we eventually feed this data into a convolutional network, which takes a fixed length input.&lt;/p&gt;
+
+&lt;p&gt;Finally, we create &lt;code class=&quot;highlighter-rouge&quot;&gt;padded_batch&lt;/code&gt;es. The first input is the batch size, 16, then we have the shape of each element output by the previous map function, and lastly the values to pad with. Note that we had to provide a pad value for the rating even though we know it will never need to be padded.&lt;/p&gt;
+
+&lt;p&gt;Lastly, we call &lt;code class=&quot;highlighter-rouge&quot;&gt;make_one_shot_iterator&lt;/code&gt;, get a value, and evaluate it to confirm we can read from our dataset!&lt;/p&gt;
+
+&lt;p&gt;The TFRecords api is considered the standard data input format for Tensorflow models and based on Google’s protobufs. TFRecords provide many advantages like speed and an easy way to read data too large to fit in memory. Unfortunately the api is extremely difficult to use, and we find ourselves wrapping objects in objects where sane defaults could be much easier to work with.&lt;/p&gt;</content><author><name></name></author><summary type="html">Every deep neural network training algorithm revolves around a stream of input data to train on. In Tensorflow the preferred method for data input is via tfrecords. Tfrecords are a binary file format of your data using Google’s protocol buffers which provide fast and efficient disk reads. Tfrecords also allow datasets to be split across multiple files in case they do not fit in memory.</summary></entry><entry><title type="html">Data Ingestion</title><link href="http://localhost:4000/2018/04/21/data-ingestion.html" rel="alternate" type="text/html" title="Data Ingestion" /><published>2018-04-21T00:00:00-04:00</published><updated>2018-04-21T00:00:00-04:00</updated><id>http://localhost:4000/2018/04/21/data-ingestion</id><content type="html" xml:base="http://localhost:4000/2018/04/21/data-ingestion.html">&lt;p&gt;In Tensorflow the majority of users are most familiar with what is known as Feeding data. The Tensorflow feed mechanism allows users to inject data into any Tensor in their computational graph. Here is a simple example (&lt;a href=&quot;https://www.tensorflow.org/api_guides/python/reading_data&quot;&gt;original source&lt;/a&gt;).&lt;/p&gt;
+
+&lt;h2 id=&quot;build-and-profile-a-model&quot;&gt;Build And Profile A Model&lt;/h2&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Session&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;input&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;placeholder&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;float32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;classifier&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;classifier&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;eval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;feed_dict&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;input&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;my_python_preprocessing_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()}))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;We have built a simple model based on &lt;a href=&quot;https://arxiv.org/pdf/1701.04783.pdf&quot;&gt;this&lt;/a&gt; paper that uses a feed dict to train. You can find the source code for our model &lt;a href=&quot;https://github.com/aistein/dlprof/blob/master/DeepCoNN%20-%20feed%20dict.ipynb&quot;&gt;here&lt;/a&gt;. There are two important aspects to this model.&lt;/p&gt;
+
+&lt;p&gt;First, you will see that we are using a &lt;code class=&quot;highlighter-rouge&quot;&gt;feed_dict&lt;/code&gt; to run an interative optimization operation.&lt;/p&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;_&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;l&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sess&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train_op&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;feed_dict&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;u_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;user_batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;i_inputs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;item_batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;ratings_input&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rating_batch&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;Second, note that the &lt;code class=&quot;highlighter-rouge&quot;&gt;Batch_Dataset&lt;/code&gt; class is iterable, and that it has the &lt;code class=&quot;highlighter-rouge&quot;&gt;__next__&lt;/code&gt; function defined.&lt;/p&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;Batch_Dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;object&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;__iter__&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;__next__&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;iter&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;iter&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stop_iter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;iter&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;raise&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;StopIteration&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;rand_indices&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;np&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;random&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;choice&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ratings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;replace&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;False&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;np&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;array&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;user_review_list&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand_indices&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]),&lt;/span&gt;
+                    &lt;span class=&quot;n&quot;&gt;np&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;array&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;item_review_list&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand_indices&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]),&lt;/span&gt;
+                    &lt;span class=&quot;n&quot;&gt;np&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;array&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ratings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand_indices&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reshape&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;As defined our &lt;code class=&quot;highlighter-rouge&quot;&gt;__next__&lt;/code&gt; method will select a random subset from three numpy arrays, one containing user reviews of items, one containing reviews for an item by other users, and one containing the rating this user gave this item. It is important to note that this is text data that has already been cleaned and only needs to be converted to indices, then embeddings, in order to pass them through our network.&lt;/p&gt;
+
+&lt;p&gt;We use tensorflow to do the conversion by defining a HashTable and embeddings Variable.&lt;/p&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;table&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;contrib&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HashTable&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;contrib&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;KeyValueTensorInitializer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;keys&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;values&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;word_embeddings&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_variable&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;&quot;word_embeddings&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;shape&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;emb_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;We found that this model took &lt;code class=&quot;highlighter-rouge&quot;&gt;59.807&lt;/code&gt; seconds to train to completion. Further, we found that the GPU reached at most &lt;code class=&quot;highlighter-rouge&quot;&gt;30%&lt;/code&gt; utilization.&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;+-----------------------------------------------------------------------------+
+| Processes:                                                       GPU Memory |
+|  GPU       PID   Type   Process name                             Usage      |
+|=============================================================================|
+|    0      2027      C   python                                     10941MiB |
++-----------------------------------------------------------------------------+
+Sat Apr 21 22:34:11 2018
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 390.30                 Driver Version: 390.30                    |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|===============================+======================+======================|
+|   0  Tesla K80           Off  | 00000000:00:1E.0 Off |                    0 |
+| N/A   63C    P0    65W / 149W |  10954MiB / 11441MiB |     30%      Default |
++-------------------------------+----------------------+----------------------+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;getting-the-most-out-of-tensorflow&quot;&gt;Getting The Most Out Of Tensorflow&lt;/h2&gt;
+
+&lt;p&gt;For our case this may be sufficient. Waiting only one minute for a model to train is amazing compared to other models like AlphaGo which take 4 - 6 weeks even with all the resources available to DeepMind. According to the Tensorflow documentation &lt;a href=&quot;https://www.tensorflow.org/performance/performance_guide&quot;&gt;here&lt;/a&gt;&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;If GPU utilization is not approaching 80-100%, then the input pipeline may be the bottleneck.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;To see what may be holding us back from full gpu utilization we decided to run a check with the python profiler.&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python -m cProfile -s tottime DeepCoNN\ -\ feed\ dict.py &amp;gt; profile.txt
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Looking inside profile.txt we find the following.&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      825   17.388    0.021   17.388    0.021 {built-in method _pywrap_tensorflow_internal.TF_Run}
+    58294   15.318    0.000   15.318    0.000 {built-in method numpy.core.multiarray.array}
+    ...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;As expected, our model spends the most time on some Tensorflow &lt;code class=&quot;highlighter-rouge&quot;&gt;TF_Run&lt;/code&gt; which takes approximately 17.388 seconds. Interestingly, the next line shows us that the second most expensive method is a cast to Numpy arrays which almost takes just as long as the &lt;code class=&quot;highlighter-rouge&quot;&gt;TF_Run&lt;/code&gt; calls. This begs the question, how do we remove this cast to numpy arrays?&lt;/p&gt;
+
+&lt;p&gt;Of course, Tensorflow has a built in api for &lt;a href=&quot;https://www.tensorflow.org/programmers_guide/datasets&quot;&gt;Importing Data&lt;/a&gt;. They even have a &lt;a href=&quot;https://www.tensorflow.org/performance/datasets_performance&quot;&gt;performance guide&lt;/a&gt;, which we will use as a roadmap to change our model’s training process.&lt;/p&gt;
+
+&lt;p&gt;We can envision the problem with our model with the following image, taken from the Tensorflow performance guide link.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/datasets_without_pipelining.png&quot; alt=&quot;No Pipelining&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Our problem is actually twofold. First, our model is spending too much time waiting for python to break the dataset into random batches of Numpy arrays. Additionally, though less obvious, we then have to transfer that data from Python’s environment to the Tensorflow session. Both of these problems can be solved simultaneously using Tensorflow’s &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.data&lt;/code&gt; api. This api can ingest data from multiple file types like csv, text files, string inputs and even multiple files of those types. We will use &lt;code class=&quot;highlighter-rouge&quot;&gt;tfrecords&lt;/code&gt; because they are described as the standard tensorflow format. For now we will assume you have your data in a binary &lt;code class=&quot;highlighter-rouge&quot;&gt;*.tfrecords&lt;/code&gt; file of the proper format, but due to a lack of documentation, we will be making another, shorter, post on how to create these data files and work with the api.&lt;/p&gt;
+
+&lt;p&gt;Additionally, we will change our model to use the Estimator api to ingest data in order to handle variable, queue, and table initialization as well as removing the call to &lt;code class=&quot;highlighter-rouge&quot;&gt;tf_run&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;feed_dict&lt;/code&gt; usage. You can find the final model &lt;a href=&quot;https://github.com/aistein/dlprof/blob/master/DeepCoNN%20-%20tfrecords.ipynb&quot;&gt;here&lt;/a&gt;. Importantly, you will note that we have defined our model construction in a single function with &lt;code class=&quot;highlighter-rouge&quot;&gt;model_fn(features, labels, mode)&lt;/code&gt;. This model is fed data through the &lt;code class=&quot;highlighter-rouge&quot;&gt;features&lt;/code&gt; parameter via an iterator built by the following function.&lt;/p&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;get_dataset_iterator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;loc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;max_len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pad_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;TFRecordDataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;loc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefetch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parse_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;num_parallel_calls&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;num_parallel_calls&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_truncate_fn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;num_parallel_calls&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;padded_batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padded_shapes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;None&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padding_values&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pad_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pad_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;shuffle&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;26352&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;iterator&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;make_one_shot_iterator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;iterator&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;As we can see, this reads a tfrecords file from the location, prefetches a batch, parses the data, splits the data (we are working with strings), truncates strings that are too long, pads and batches strings that are too short, shuffles the full dataset (in our case we know there are 26352 data points) then returns an iterator that traverses each data point. For now we will assume some familiarity with reading tfrecord files, but in another post we will have more documentation on doing so.&lt;/p&gt;
+
+&lt;p&gt;By using tfrecords and the &lt;code class=&quot;highlighter-rouge&quot;&gt;tf.data&lt;/code&gt; api our model is able to train in 30.879 seconds. Again, think in percentages of improvement rather than absolute terms, our 30 second improvement is actually 50% less time to train the model. This could be a 4 - 6 week training time turning into a 2 - 3 week training time. Looking at our GPU utilization, we actually got as high as 61% at some points! Approaching the 80% utilization the Tensorflow documentation specifies as an approximate heuristic.&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;+-----------------------------------------------------------------------------+
+| Processes:                                                       GPU Memory |
+|  GPU       PID   Type   Process name                             Usage      |
+|=============================================================================|
+|    0      2101      C   python                                     10941MiB |
++-----------------------------------------------------------------------------+
+Sat Apr 21 22:35:18 2018
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 390.30                 Driver Version: 390.30                    |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|===============================+======================+======================|
+|   0  Tesla K80           Off  | 00000000:00:1E.0 Off |                    0 |
+| N/A   66C    P0   106W / 149W |  10954MiB / 11441MiB |     61%      Default |
++-------------------------------+----------------------+----------------------+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finally looking at the python profile we can obviously see that our cast to numpy is gone, and the most time consuming process was &lt;code class=&quot;highlighter-rouge&quot;&gt;TF_Run&lt;/code&gt; which took about 24 seconds because it now includes all of our data ingestion as well as model training.&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      851   24.341    0.029   24.341    0.029 {built-in method _pywrap_tensorflow_internal.TF_Run}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;What we can imagine having happening now is that the Tensorflow api is able to read and preprocess data prior to our model requesting more data to train on. Rather than all the time spent idle as above, our model training now looks like the bottom diagram in the following image during each iteration.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/dlprof/assets/datasets_parallel_map.png&quot; alt=&quot;Parallel Data Ingestion&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;In conclusion, inference and model training times have opportunity for vast improvement using simple, well known tools and concepts. Simply using the recommended input format, parallelizing data collection and preprocessing improved our training time by 50% which in long-running models is significant.&lt;/p&gt;</content><author><name></name></author><summary type="html">Using the recommended data ingestion pipelines can improve gpu utilization from 30% to 61% in simple models, and decrease training time by 50%</summary></entry></feed>
