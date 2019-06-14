@@ -166,6 +166,13 @@ int main(int argc, char *argv[])
 
 	string cdf_filename = "";
 	string output_directory = "";
+	if ( tag != "dctcp" ) {
+		if (nonblind) {
+			tag += "_omniscient";
+		} else {
+			tag += "_blind";
+		}
+	}
 	uint32_t sim_duration = 6000; // Microseconds
 	cout << "Profile = " << profile << "\n";
 	switch (profile)
@@ -477,7 +484,8 @@ int main(int argc, char *argv[])
 			break;
 	}
 	//double lam = (link_rate*load)/(meanFlowSize*8.0/1460*1500);
-	double lam = (link_rate*load*load_multiplier)/(meanFlowSize*8.0);
+	//double lam = (link_rate*load*load_multiplier)/(meanFlowSize*8.0);
+	double lam = (link_rate*load)/(meanFlowSize*8.0*total_host);
 	cout << "Lambda Per Source: " << lam << " flows/s per source\n";
 	double mean_t = 1.0/lam * 10e9; // nanoseconds
 	cout << "Mean Inter-Arrival Time: " << mean_t << " ns\n";

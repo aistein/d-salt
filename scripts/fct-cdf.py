@@ -249,9 +249,11 @@ def main(argv):
     sim_list = []
     sim_names = []
     sim_timebounds = [] # in microseconds
+    sim_modes = []
     for i, xmlfile in enumerate(argv[1:]):
         file_obj = open(xmlfile)
-        raw_simname = xmlfile.split("/")[2].split(".")[0].split("_")
+        raw_simname = xmlfile.split("/")[-1].split(".")[0].split("_")
+        sim_modes.append('omniscient' if raw_simname[-1] == 'omniscient' else 'blind')
         sim_profile = raw_simname[0]
         sim_tag = "_".join(raw_simname[1:])
         sim_names.append(sim_tag)
@@ -278,13 +280,14 @@ def main(argv):
                     sys.stdout.flush()
         print " done."
 
-    colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
-    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
-
+    #colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
+    #markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
+    colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan', 'xkcd:teal', 'xkcd:lilac', 'xkcd:aqua', 'xkcd:olive', 'xkcd:peach']
+    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
     # replace 'a's with greek 'alpha's
     for i, sim_name in enumerate(sim_names):
         if sim_name[0] == 'a':
-            sim_names[i] = r'$\alpha$' + ' = ' + sim_name[1:] 
+            sim_names[i] = r'$\alpha$' + ' = ' + sim_name[1:] + ', ' + sim_modes[i]
 
     # FCT CDF
     fig, ax = plt.subplots()

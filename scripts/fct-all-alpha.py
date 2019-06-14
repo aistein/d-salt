@@ -291,9 +291,10 @@ def main(argv):
                     sys.stdout.flush()
         print " done."
 
-    colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
-    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
-
+    #colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan']
+    #markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4"]
+    colors = ['tab:gray', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:orange', 'tab:olive', 'tab:cyan', 'xkcd:teal', 'xkcd:lilac', 'xkcd:aqua', 'xkcd:olive', 'xkcd:peach']
+    markers = ["x", "o", "v", "s", "+", "x", "d", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
     # replace 'a's with greek 'alpha's
     for i, sim_name in enumerate(sim_names):
         if sim_name[0] == 'a':

@@ -4,6 +4,7 @@ ns3.29-workspace-dev
 *.log
 *.txt
 *.png
+*.swp
 logs/
 results/
 tmp/

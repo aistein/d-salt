@@ -282,7 +282,11 @@ for i in "${profiles[@]}"; do
 		args+=("${prefix}_nopbs_nodctcp.xml")
 	fi
 	for a in "${alphas[@]}"; do
-		args+=("${prefix}_a${a}.xml")
+		if [ "$nonblind" = true ]; then
+			args+=("${prefix}_a${a}_omniscient.xml")
+		else
+			args+=("${prefix}_a${a}_blind.xml")
+		fi
 		if [ "$without_dctcp" = true ]; then
 			args+=("${prefix}_a${a}_nodctcp.xml")
 		fi
