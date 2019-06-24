@@ -135,7 +135,8 @@ int main(int argc, char *argv[])
 //
 	uint32_t profile = 1;
 	string tag = "";
-	double alpha = 0.001;
+	string alpha_val = "";
+	//double alpha = 0.001;
 	uint32_t num_flows = 1;
 	bool fast = false;
 	bool use_pbs = true;
@@ -151,7 +152,7 @@ int main(int argc, char *argv[])
 	CommandLine cmd;
 	cmd.AddValue("profile", "identifier of the workload distribution to be tested (int)", profile);
 	cmd.AddValue("tag", "desired postfix for output files (string)", tag);
-	cmd.AddValue("alpha", "tunable parameter dictating scheduling policy (double)", alpha);
+	cmd.AddValue("alpha", "tunable parameter dictating scheduling policy (string)", alpha_val);
 	cmd.AddValue("fast", "speed up simulation by using Mbps links instead of Gbps links (bool)", fast);
 	cmd.AddValue("apps", "how many apps to run (int)", num_flows);
 	cmd.AddValue("buff", "buffer size of each switch (int)", buffer_size);
@@ -163,7 +164,13 @@ int main(int argc, char *argv[])
 	cmd.AddValue("oversub", "oversubscribed topo 2:1 (bool)", oversub);
 	cmd.AddValue("nonblind", "non-blind version of PBS (bool)", nonblind);
 	cmd.Parse (argc, argv);
-
+	
+	double alpha = 0.001;
+	std::cout << "(str) alpha_val = " << alpha_val << "\n";
+	if (alpha_val  == "0p1") {
+		alpha = 0.1;
+	}
+	std::cout << "(int) alpha = " << alpha << "\n";
 	string cdf_filename = "";
 	string output_directory = "";
 	if ( tag != "dctcp" ) {
